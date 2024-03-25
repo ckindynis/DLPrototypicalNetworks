@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import random
 from collections import defaultdict
 from pathlib import Path
@@ -23,51 +24,78 @@ import shutil
 # TODO make the same script for the other datasets (the miniImageNet version of ILSVRC-2012) (2011 version of the Caltech UCSD bird dataset)
  
 
-class OmnigotDataset(Dataset):
-    def _init_(self, annotations_file=None, img_dir=None, transform=None, target_transform=None, train=True) -> None:
-        self.img_dir = img_dir or os.path.join(f"{__file__}", "..", "data", "omniglot")
-        self.training = train
+class DatasetBase(ABC):
+    def _init_(self, base_dir: str, k_way: int, k_shot: int, k_query: int, n_episodes: int, mode: str = "train", transform: transforms.Compose = None, target_transform: transforms.Compose = None) -> None:
+        self.k_way = k_way
+        self.k_shot = k_shot
+        self.k_query = k_query
+        self.transform = transform
+        self.target_transform = target_transform
+        self.mode = mode
+        self.base_dir = Path(base_dir)
+        self.n_episodes = n_episodes
+        self._load_data()
+
+    @abstractmethod
+    def _load_data(self):
+        pass
+
+class OmniglotDataset(DatasetBase):
+        
+    def _load_data(self):    
+        print("Initializing Omniglot dataset")
+        self.img_dir = self.base_dir
 
         train_data_exists = os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt")) and os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"))
+        val_data_exists = os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "val_data.pt")) and os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "val_data_labels.pt"))
         test_data_exists = os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt")) and os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"))                                                                
-        data_already_exists = train_data_exists if self.training else test_data_exists
+        data_already_exists = train_data_exists if self.mode == "train" else val_data_exists if self.mode == "validation" else test_data_exists
 
         if data_already_exists:
             print("Loading data from file")
-            if self.training:
-                self.train_data_images = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt")) 
-                self.train_data_labels = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"))
+            if self.mode == "train":
+                self.data_images = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt")) 
+                self.data_labels = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"))
+            elif self.mode == "validation":
+                self.data_images = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "val_data.pt"))
+                self.data_labels = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "val_data_labels.pt"))
             else:
-                self.test_data_images = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt"))
-                self.test_data_labels = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"))
+                self.data_images = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt"))
+                self.data_labels = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"))
         else:
             print("Data not found, loading from Omniglot dataset")
-            if self.training:
-                self.train_data_images, self.train_data_labels = self.download_data()
+            if self.mode == "train" or self.mode == "validation":
+                data_images, data_labels = self.download_data()
+
+                # Split the training data into training and validation sets
+                train_size = int(0.8 * len(self.data_images))
+                val_size = len(data_images) - train_size
+                train_data_images, val_data_images = random_split(data_images, [train_size, val_size])
+                train_data_labels, val_data_labels = random_split(data_labels, [train_size, val_size])                
 
                 # save the transformed data to a file for faster loading 
-                torch.save(self.train_data_images, os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt"))  
-                torch.save(self.train_data_labels, os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"))
-            else:                 
-                self.test_data_images, self.test_data_labels = self.download_data()
+                torch.save(train_data_images, os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt"))  
+                torch.save(train_data_labels, os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"))
+                torch.save(val_data_images, os.path.join(f"{__file__}", "..", "data", "omniglot", "val_data.pt"))
+                torch.save(val_data_labels, os.path.join(f"{__file__}", "..", "data", "omniglot", "val_data_labels.pt"))
+                if self.mode == "train":
+                    data_images = train_data_images
+                    data_labels = train_data_labels
+                else:
+                    data_images = val_data_images
+                    data_labels = val_data_labels
+            else: # test                
+                self.data_images, self.data_labels = self.download_data()
 
                 # save the transformed data to a file for faster loading
-                torch.save(self.test_data_images, os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt"))                
-                torch.save(self.test_data_labels, os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"))       
+                torch.save(self.data_images, os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt"))                
+                torch.save(self.data_labels, os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"))       
             print("Deleting the Omniglot dataset folder to save space")    
             shutil.rmtree(os.path.join(f"{__file__}", "..", "data", "omniglot", "omniglot-py"))
-            os.rmdir(os.path.join(f"{__file__}", "..", "data", "omniglot", "omniglot-py"))
-                
-            
-
-    def _len_(self):
-        return len(self.train_data_images) if self.training else len(self.test_data_images)
+            os.rmdir(os.path.join(f"{__file__}", "..", "data", "omniglot", "omniglot-py")) 
         
-    def _getitem_(self, idx):
-        return (self.train_data_images[idx], self.train_data_labels[idx]) if self.training else (self.test_data_images[idx], self.test_data_labels[idx])
-
     def download_data(self):
-        data = datasets.Omniglot(self.img_dir, download=True, background=self.training)
+        data = datasets.Omniglot(self.img_dir, download=True, background=self.mode == "train" or self.mode == "validation")
 
         # resize images to 28x28
         data = [(img[0].resize((28, 28)), img[1]) for img in data]
@@ -87,7 +115,30 @@ class OmnigotDataset(Dataset):
         data_labels = [img[1] for img in data]
 
         return data_images, data_labels
-
+    ''''
+    def _iter_(self) -> dict[str, torch.Tensor]:
+        for _ in range(self.n_episodes):
+            classes = np.random.choice(self.dataset.classes, self.k_way, replace=False)
+            datapoints = defaultdict(list)
+            for class_ in classes:
+                images = np.random.choice(self.dataset.class_to_idx[class_], self.k_shot + self.k_query, replace=False)
+                for i, image in enumerate(images):
+                    datapoints[class_].append(self.dataset[i][0])
+            # convert the list of tensors to a tensor
+            for class_ in datapoints:
+                datapoints[class_] = torch.stack(datapoints[class_])
+            yield datapoints
+    '''
+    def __iter__(self):
+        for _ in range(self.n_episodes):
+            classes = np.random.choice(self.data_labels, self.k_way, replace=False)
+            datapoints = defaultdict(list)
+            for class_ in classes:
+                datapoints[class_].append(self.data_images[self.data_labels.index(class_)])
+            for class_ in datapoints:
+                datapoints[class_] = torch.stack(datapoints[class_])
+            yield datapoints
+            
 
 
 # class MiniImageNetDataset(Dataset):
@@ -175,8 +226,11 @@ class OmnigotDataset(Dataset):
 
 if __name__ == "__main__":
     # test the Omniglot dataset
-    omniglot = OmnigotDataset()
-    print(omniglot[0])
+    print("Testing the Omniglot dataset")
+    omniglot_train = OmniglotDataset()._init_(mode="validation", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=1000)
+    omniglot_val = OmniglotDataset()._init_(mode="validation", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=1000)
+    omniglot_test = OmniglotDataset()._init_(mode="test", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=1000)
+
 
     # # test the MiniImageNet dataset
     # mini_image_net = MiniImageNetDataset(path=os.path.join(f"{__file__}", "..", "data", "mini-imagenet"))
