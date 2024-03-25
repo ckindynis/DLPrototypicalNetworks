@@ -1,11 +1,20 @@
+import random
+from collections import defaultdict
+from pathlib import Path
+from random import shuffle
+from typing import Any
+
+import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, random_split, Subset
 from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
+from torchvision.io import read_image
 # import matplotlib.pyplot as plt
 from torchvision.datasets.utils import download_and_extract_archive, check_integrity
 import os
-from PIL import Image
+from PIL import ImageFile
+import pandas as pd
 
 # TODO make the class dependent on training/testing
 # TODO prevent download/transform if data is already downloaded/transformed  -> DONE
@@ -102,5 +111,86 @@ class OmnigotDataset(Dataset):
     #     download_and_extract_archive(url, self.img_dir, filename=zip_filename, md5=self.zips_md5[filename])
 
 
-if __name__ == "__main__":
-    test = OmnigotDataset()
+
+class MiniImageNetDataset(Dataset):
+    def __init__(self, path : str | Path, train_val_test_class_frac: list[float] = None, train_val_test_example_size: list[int] = None, mode: str = "train") -> None:
+        if train_val_test_class_frac is None:
+            train_val_test_class_frac = [0.64, 0.16, 0.2]
+        if train_val_test_example_size is None:
+            train_val_test_example_size = [1, 1, 15]
+
+        assert sum(train_val_test_class_frac) == 1, "The sum of the fractions must be equal to 1"
+
+        self.mode = mode
+        self.class_frac = {"train": train_val_test_class_frac[0],
+                           "validation": train_val_test_class_frac[1],
+                           "test": train_val_test_class_frac[2]
+                           }
+        self.example_size = {"train": train_val_test_example_size[0],
+                             "validation": train_val_test_example_size[1],
+                             "test": train_val_test_example_size[2]
+                             }
+        self.path = path
+        self.transform = transforms.Compose([
+            transforms.Resize((84, 84)),
+            transforms.ToTensor()
+        ])
+        self.transform = None
+        self.target_transform = None
+
+        # load the data
+        mini_image_net_data = datasets.ImageFolder(root=path)
+
+        class_splits = self._split_classes(mini_image_net_data)
+        self.subsets = self._create_subsets(mini_image_net_data, class_splits)
+        
+    def _split_classes(self, data: datasets.ImageFolder) -> dict[str, list[str]]:
+        # Split the data classes into training, validation and test sets
+        all_classes = data.classes
+        shuffle(all_classes)
+
+        # Split the classes into training, validation and test classes
+        train_classes = all_classes[:int(self.class_frac["train"] * len(all_classes))]
+        validation_classes = all_classes[int(self.class_frac["train"] * len(all_classes)):int((self.class_frac["train"] + self.class_frac["validation"]) * len(all_classes))]
+        test_classes = all_classes[int((self.class_frac["train"] + self.class_frac["validation"]) * len(all_classes)):]
+
+        return {"train": train_classes, "validation": validation_classes, "test": test_classes}
+
+
+    def _create_subsets(self, data: datasets.ImageFolder, class_splits: dict[str, list[str]]) -> dict[str, Subset]:
+        # From each class, sample the number of examples specified in train_val_test_example_size
+        subsets = {}
+        indices_by_class = defaultdict(list)
+        for idx, (_, label) in enumerate(data.samples):
+            indices_by_class[label].append(idx)
+
+        for subset, classes in class_splits.items():
+            selected_idx = []
+            for cls in classes:
+                cls_idx = data.class_to_idx[cls]
+                indices = indices_by_class[cls_idx]
+                if len(indices) < self.example_size[subset]:
+                    selected_idx.extend(indices)
+                else:
+                    selected_idx.extend(random.sample(indices, self.example_size[subset]))
+            subsets[subset] = Subset(data, selected_idx)
+
+        return subsets
+
+    def __len__(self):
+        return len(self.subsets[self.mode])
+
+    def __getitem__(self, index: int) -> Any:
+        data = self.subsets[self.mode]
+        img, label = data[index]
+
+        if self.transform:
+            img = self.transform(img)
+        if self.target_transform:
+            label = self.target_transform(label)
+
+        return img, label
+    
+    def set_mode(self, mode: str) -> None:
+        self.mode = mode
+
