@@ -150,26 +150,28 @@ class MiniImageNetDataset(DatasetBase):
     def _load_data(self):
         self.dataset = datasets.ImageFolder(os.path.join(self.base_dir, self.mode))
 
-    def __iter__(self) -> dict[str, torch.Tensor]:
+    def __iter__(self) -> tuple[torch.Tensor, torch.Tensor]:
         # Organize samples by class
         self.samples_per_class = defaultdict(list)
         for idx, (path, label) in enumerate(self.dataset.samples):
             self.samples_per_class[label].append(idx)
         for _ in range(self.n_episodes):
             classes = np.random.choice(list(self.samples_per_class.keys()), self.k_way, replace=False)
-            datapoints: dict[str, list] = defaultdict(list)
+            data = []
+            labels = []
+
             for cls_idx in classes:
                 selected_indices = np.random.choice(self.samples_per_class[cls_idx], self.k_shot + self.k_query, replace=False)
                 for idx in selected_indices:
                     # transform
                     image_transformed = self.transform(self.dataset[idx][0])
+                    print(image_transformed.shape)
                     class_transformed = self.target_transform(cls_idx)
 
-                    datapoints[class_transformed].append(image_transformed)
-            # convert the list of tensors to a tensor
-            for cls in datapoints:
-                datapoints[cls] = torch.stack(datapoints[cls])
-            yield datapoints
+                    data.append(image_transformed)
+                    labels.append(class_transformed)
+
+            yield torch.stack(data), torch.tensor(labels)
 
 
 

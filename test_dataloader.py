@@ -46,41 +46,33 @@ from DLPrototypicalNetworks.dataloader import MiniImageNetDataset
 
 def test_mini_image_net_dataset():
     # training set
-    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="train", k_shot=1, k_way=5, k_query=5, n_episodes=100)
+    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="train", k_way=5, k_shot=1, k_query=5, n_episodes=100)
     # check whether one episode has 5 classes, and each class has (k_shot + k_query) examples + check number of episodes
     n_episodes = 0
-    for datapoints in dataset:
-        print(datapoints)
-        assert len(datapoints) == 5
-        for _, examples in datapoints.items():
-            assert len(examples) == 6
+    for datapoints, labels in dataset:
+        assert datapoints.shape == (30, 3, 84, 84)
+        assert labels.shape == (30,)
         n_episodes += 1
-
     assert n_episodes == 100
 
     # now the test set
-    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="test", k_shot=1, k_way=5, k_query=5, n_episodes=100)
+    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="test", k_way=5, k_shot=2, k_query=5, n_episodes=100)
     # check whether one episode has 5 classes, and each class has (k_shot + k_query) examples + check number of episodes
     n_episodes = 0
-    for datapoints in dataset:
-        print(datapoints)
-        assert len(datapoints) == 5
-        for _, examples in datapoints.items():
-            assert len(examples) == 6
+    for datapoints, labels in dataset:
+        assert datapoints.shape == (35, 3, 84, 84)
+        assert labels.shape == (35,)
         n_episodes += 1
-
     assert n_episodes == 100
 
     # now the validation set
-    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="validation", k_shot=1, k_way=5, k_query=5, n_episodes=100)
+    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="validation", k_way=6, k_shot=2, k_query=5, n_episodes=100)
     # check whether one episode has 5 classes, and each class has (k_shot + k_query) examples + check number of episodes
     n_episodes = 0
-    for datapoints in dataset:
-        assert len(datapoints) == 5
-        for _, examples in datapoints.items():
-            assert len(examples) == 6
+    for datapoints, labels in dataset:
+        assert datapoints.shape == (42, 3, 84, 84)
+        assert labels.shape == (42,)
         n_episodes += 1
-
     assert n_episodes == 100
 
 
