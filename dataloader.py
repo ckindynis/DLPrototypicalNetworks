@@ -113,6 +113,18 @@ class OmnigotDataset(Dataset):
 
 class DatasetBase(ABC):
     def __init__(self, base_dir: str | Path, k_way: int, k_shot: int, k_query: int, n_episodes: int, mode: str = "train", transform: transforms.Compose = None, target_transform: transforms.Compose = None) -> None:
+        """
+        Args:
+            base_dir: str | Path, root directory of the dataset
+            k_way: int, number of classes
+            k_shot: int, number of support examples per class
+            k_query: int, number of query examples per class
+            n_episodes: int, number of episodes (each episode selects {k_way} new set of classes)
+            mode: str, train/validation/test
+            transform: transforms.Compose, transform to apply to the images
+            target_transform: transforms.Compose, transform to apply to the labels
+
+        """
         self.k_way = k_way
         self.k_shot = k_shot
         self.k_query = k_query
