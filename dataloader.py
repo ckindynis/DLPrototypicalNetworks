@@ -143,7 +143,6 @@ class MiniImageNetDataset(DatasetBase):
         self.samples_per_class = defaultdict(list)
         for idx, (path, label) in enumerate(self.dataset.samples):
             self.samples_per_class[label].append(idx)
-        print(self.transform)
         for _ in range(self.n_episodes):
             classes = np.random.choice(list(self.samples_per_class.keys()), self.k_way, replace=False)
             datapoints: dict[str, list] = defaultdict(list)

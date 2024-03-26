@@ -72,11 +72,10 @@ def test_mini_image_net_dataset():
     assert n_episodes == 100
 
     # now the validation set
-    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="val", k_shot=1, k_way=5, k_query=5, n_episodes=100)
+    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="validation", k_shot=1, k_way=5, k_query=5, n_episodes=100)
     # check whether one episode has 5 classes, and each class has (k_shot + k_query) examples + check number of episodes
     n_episodes = 0
     for datapoints in dataset:
-        print(datapoints)
         assert len(datapoints) == 5
         for _, examples in datapoints.items():
             assert len(examples) == 6
