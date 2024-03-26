@@ -1,4 +1,10 @@
+import os
+import sys
 from collections import defaultdict
+from pathlib import Path
+from random import shuffle
+
+import numpy as np
 
 from DLPrototypicalNetworks.dataloader import MiniImageNetDataset
 
@@ -37,27 +43,45 @@ from DLPrototypicalNetworks.dataloader import MiniImageNetDataset
 #
 #         """
 #         return torch.randn(self.n_shot, 3, self.resize, self.resize), torch.randn(self.k_query, 3, self.resize, self.resize)
+
 def test_mini_image_net_dataset():
-    dataset = MiniImageNetDataset(path="data/mini-imagenet", mode="train")
-    assert len(dataset) == 64
-    # assert length of each subset is correct
-    assert len(dataset.subsets["train"]) == 64
-    assert len(dataset.subsets["validation"]) == 16
-    assert len(dataset.subsets["test"]) == 20 * 15
+    # training set
+    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="train", k_shot=1, k_way=5, k_query=5, n_episodes=100)
+    # check whether one episode has 5 classes, and each class has (k_shot + k_query) examples + check number of episodes
+    n_episodes = 0
+    for datapoints in dataset:
+        print(datapoints)
+        assert len(datapoints) == 5
+        for _, examples in datapoints.items():
+            assert len(examples) == 6
+        n_episodes += 1
 
-    # assert that the number of examples in each subset is correct
-    assert len(dataset.subsets["train"].indices) == 64
-    assert len(dataset.subsets["validation"].indices) == 16
-    assert len(dataset.subsets["test"].indices) == 20 * 15
+    assert n_episodes == 100
 
-    # get items from each mode and check that the number of items is correct for each subset class
-    for mode in ["train", "validation", "test"]:
-        dataset.set_mode(mode)
-        mode_data = defaultdict(list)
-        for idx in range(len(dataset)):
-            img, label = dataset[idx]
-            mode_data[label].append(img)
-        for key, value in mode_data.items():
-            assert len(value) == dataset.example_size[mode]
+    # now the test set
+    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="test", k_shot=1, k_way=5, k_query=5, n_episodes=100)
+    # check whether one episode has 5 classes, and each class has (k_shot + k_query) examples + check number of episodes
+    n_episodes = 0
+    for datapoints in dataset:
+        print(datapoints)
+        assert len(datapoints) == 5
+        for _, examples in datapoints.items():
+            assert len(examples) == 6
+        n_episodes += 1
+
+    assert n_episodes == 100
+
+    # now the validation set
+    dataset = MiniImageNetDataset(base_dir="data/mini-imagenet", mode="validation", k_shot=1, k_way=5, k_query=5, n_episodes=100)
+    # check whether one episode has 5 classes, and each class has (k_shot + k_query) examples + check number of episodes
+    n_episodes = 0
+    for datapoints in dataset:
+        assert len(datapoints) == 5
+        for _, examples in datapoints.items():
+            assert len(examples) == 6
+        n_episodes += 1
+
+    assert n_episodes == 100
+
 
 
