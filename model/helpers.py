@@ -23,8 +23,3 @@ def compute_barycenters(support_tensor, num_classes, num_points, emb_size):
     barycenters = support_tensor.view(num_classes, num_points, emb_size).mean(1)
 
     return barycenters
-
-
-def proto_loss(X_train, y_train, X_test, y_test, n_support):
-
-    pass

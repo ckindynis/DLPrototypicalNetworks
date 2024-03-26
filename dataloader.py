@@ -165,7 +165,6 @@ class MiniImageNetDataset(DatasetBase):
                 for idx in selected_indices:
                     # transform
                     image_transformed = self.transform(self.dataset[idx][0])
-                    print(image_transformed.shape)
                     class_transformed = self.target_transform(cls_idx)
 
                     data.append(image_transformed)

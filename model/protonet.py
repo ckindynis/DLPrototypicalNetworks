@@ -3,14 +3,15 @@ from typing import Optional
 import torch
 
 
-class ConvBlock(nn.module):
+class ConvBlock(nn.Module):
     def __init__(
         self,
         in_channels,
         out_channels: int,
         conv_kernel_size: int,
         max_pool_kernel: int,
-    ):
+    ):  
+        super(ConvBlock, self).__init__()
         self.conv_block = nn.Sequential(
             nn.Conv2d(
                 in_channels=in_channels,
@@ -27,7 +28,7 @@ class ConvBlock(nn.module):
         return out
 
 
-class ProtoNetEncoder(nn.module):
+class ProtoNetEncoder(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -37,14 +38,16 @@ class ProtoNetEncoder(nn.module):
         num_conv_layers: int,
         original_embedding_size: Optional[int] = None,
         new_embedding_size: Optional[int] = None,
-    ):
+    ):  
+        super(ProtoNetEncoder, self).__init__()
+
         layers = []
 
         layers.append(
             ConvBlock(
                 in_channels=in_channels,
                 out_channels=out_channels,
-                kernel_size=conv_kernel_size,
+                conv_kernel_size=conv_kernel_size,
                 max_pool_kernel=max_pool_kernel,
             )
         )
@@ -54,7 +57,7 @@ class ProtoNetEncoder(nn.module):
                 ConvBlock(
                     in_channels=out_channels,
                     out_channels=out_channels,
-                    kernel_size=conv_kernel_size,
+                    conv_kernel_size=conv_kernel_size,
                     max_pool_kernel=max_pool_kernel,
                 )
             )
@@ -103,6 +106,7 @@ def protoLoss(model_output, target_output, n_support, n_query):
     # Get unique classes in the episode
     episode_classes = torch.unique(target_output)
 
+
     # Extract support and query points for each class
     support_points = []
     query_points = []
@@ -124,25 +128,31 @@ def protoLoss(model_output, target_output, n_support, n_query):
     acc = 0
 
     # Calculate loss for each query point
-    for  i, q in enumerate(query_points):
+    for q_idx in range(query_points.shape[1]):
         distance_list = []
         exp_sum = 0
         # Calculate distance to each barycenter
         for c in range(len(episode_classes)):
 
-            distances = torch.sum(euclidean_distance(q, barycenters[c]))
+            # distances = torch.sum(euclidean_distance(query_points[:, q_idx], barycenters[c]))
+            distances = torch.cdist(query_points[:, q_idx].unsqueeze(0), barycenters[c].unsqueeze(0))
             distance_list.append(torch.exp(-distances))
             exp_sum += torch.exp(-distances)
 
+        # import pdb; pdb.set_trace()
         # Calculate log softmax of distances
         log_smax = torch.log_softmax(torch.stack(distance_list)/exp_sum, dim=0)
 
         # Calculate accuracy
         pred_output = torch.argmax(log_smax)
-        acc += (pred_output.item() == query_targets[0][i])
+        acc += (pred_output.item() == query_targets[0][q_idx])
+
+        # TODO: Fix this mess later
+        c_idx = torch.where(episode_classes == query_targets[0][q_idx].item())[0].item()
 
         # Calculate loss for the query point, for true class
-        loss -= log_smax[query_targets[0][i]]
+
+        loss -= log_smax[c_idx]
 
     # Return loss and normalized accuracy
     return loss, acc/(n_query*len(episode_classes))

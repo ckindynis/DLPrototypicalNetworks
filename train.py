@@ -1,25 +1,76 @@
 from argparse import ArgumentParser
 from model.protonet import ProtoNetEncoder
 import torch
-from constants import Datasets, DistanceMetric
-
-# from dataloader import Dataloader
+from constants import Datasets, DistanceMetric, Modes
+from dataloader import DatasetBase, MiniImageNetDataset
+from tqdm import tqdm
+from model.protonet import protoLoss
 
 
 def train(
     model: ProtoNetEncoder,
-    train_dataloader: Dataloader,
-    validation_dataloader: Dataloader,
+    train_dataset: DatasetBase,
+    validation_dataset: DatasetBase,
     optimiser: torch.optim.Optimizer,
     lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
     device: str,
     num_epochs: int,
-):
-    pass
+    num_support_train: int,
+    num_query_train: int,
+    num_support_val: int,
+    num_query_val: int,
+    num_validation_steps: int
+):  
+    
+    train_losses = []
+    train_accuracies = []
+    val_losses = []
+    val_accuracies = []
+
+    num_steps = 0
+    for epoch in range(num_epochs):
+        for episode in tqdm(train_dataset):
+            print(f"Training: Step {num_steps} | Epoch {epoch}")
+            model.train()
+            num_steps += 1
+            image_tensors, label_tensors = episode
+            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(device)
+
+            embeddings = model(image_tensors)
+
+            train_loss, train_acc = protoLoss(model_output=embeddings, target_output=label_tensors, n_support=num_support_train, n_query=num_query_train)
+            train_loss.backward()
+
+            optimiser.step()
+
+            train_losses.append(train_loss.item())
+            train_accuracies.append(train_acc.item())
+
+            print(f"Epoch: {epoch} | Step: {num_steps} | Train Acc: {train_acc} | Train Loss: {train_loss}")
+
+
+            if num_steps % num_validation_steps == 0:
+                print(f"Doing validation at step {num_steps} epoch {epoch}")
+                
+                for val_batch in validation_dataset:
+                    model.eval()
+
+                    val_image_tensors, val_labels = val_batch
+                    val_image_tensors, val_labels = val_image_tensors.to(device), val_labels.to(device)
+                    val_embeddings = model(val_image_tensors)
+
+                    val_loss, val_acc = protoLoss(model_output=val_embeddings, target_output=val_labels, n_support=num_support_val, n_query=num_query_val)
+
+                    val_losses.append(val_loss.item())
+                    val_accuracies.append(val_acc.item())
+
+
+
+            
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser
+    parser = ArgumentParser()
 
     # Data Arguments
     parser.add_argument(
@@ -48,6 +99,13 @@ if __name__ == "__main__":
         type=int,
         help="Number of epochs for training",
         default=10,
+    )
+
+    parser.add_argument(
+        "--num_validation_steps",
+        type=int,
+        help="Number of steps after which you conduct validation",
+        default=200,
     )
 
     parser.add_argument(
@@ -186,11 +244,42 @@ if __name__ == "__main__":
         new_embedding_size=args.embedding_size,
     ).to(device)
 
-    optimiser = torch.optim.Adam(params=model.params(), lr=args.learning_rate)
+    optimiser = torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
 
     lr_scheduler = torch.optim.lr_scheduler.StepLR(
         optimizer=optimiser, gamma=args.lr_decay_gamma, step_size=args.lr_decay_step
     )
 
-    # train_dataloader =
-    # val_dataloader =
+    if args.dataset == Datasets.MINIIMAGE:
+        train_dataset = MiniImageNetDataset(
+            base_dir=args.data_path,
+            k_way=args.num_classes_train,
+            k_shot=args.num_support_train,
+            k_query=args.num_query_train,
+            n_episodes=args.num_episodes,
+        )
+        val_dataset = MiniImageNetDataset(
+            base_dir=args.data_path,
+            k_way=args.num_classes_val,
+            k_shot=args.num_support_val,
+            k_query=args.num_query_val,
+            n_episodes=args.num_episodes,
+            mode=Modes.VAL,
+        )
+
+    # Add For Omniglot here
+
+    result = train(
+        model=model,
+        train_dataset=train_dataset,
+        validation_dataset=val_dataset,
+        optimiser=optimiser,
+        lr_scheduler=lr_scheduler,
+        device=device,
+        num_epochs=args.num_epochs,
+        num_query_train=args.num_query_train,
+        num_support_train=args.num_support_train,
+        num_query_val=args.num_query_val,
+        num_support_val=args.num_support_val,
+        num_validation_steps=args.num_validation_steps
+    )
