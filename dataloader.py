@@ -1,4 +1,5 @@
 import random
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from pathlib import Path
 from random import shuffle
@@ -10,7 +11,6 @@ from torch.utils.data import Dataset, random_split, Subset
 from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
 from torchvision.io import read_image
-# import matplotlib.pyplot as plt
 from torchvision.datasets.utils import download_and_extract_archive, check_integrity
 import os
 from PIL import ImageFile
@@ -111,86 +111,59 @@ class OmnigotDataset(Dataset):
     #     download_and_extract_archive(url, self.img_dir, filename=zip_filename, md5=self.zips_md5[filename])
 
 
-
-class MiniImageNetDataset(Dataset):
-    def __init__(self, path : str | Path, train_val_test_class_frac: list[float] = None, train_val_test_example_size: list[int] = None, mode: str = "train") -> None:
-        if train_val_test_class_frac is None:
-            train_val_test_class_frac = [0.64, 0.16, 0.2]
-        if train_val_test_example_size is None:
-            train_val_test_example_size = [1, 1, 15]
-
-        assert sum(train_val_test_class_frac) == 1, "The sum of the fractions must be equal to 1"
-
+class DatasetBase(ABC):
+    def __init__(self, base_dir: str | Path, k_way: int, k_shot: int, k_query: int, n_episodes: int, mode: str = "train", transform: transforms.Compose = None, target_transform: transforms.Compose = None) -> None:
+        self.k_way = k_way
+        self.k_shot = k_shot
+        self.k_query = k_query
+        self.transform = transform or transforms.Compose([])
+        self.target_transform = target_transform or transforms.Compose([])
         self.mode = mode
-        self.class_frac = {"train": train_val_test_class_frac[0],
-                           "validation": train_val_test_class_frac[1],
-                           "test": train_val_test_class_frac[2]
-                           }
-        self.example_size = {"train": train_val_test_example_size[0],
-                             "validation": train_val_test_example_size[1],
-                             "test": train_val_test_example_size[2]
-                             }
-        self.path = path
-        self.transform = transforms.Compose([
-            transforms.Resize((84, 84)),
-            transforms.ToTensor()
-        ])
-        self.transform = None
-        self.target_transform = None
+        self.base_dir = Path(base_dir)
+        self.n_episodes = n_episodes
+        self._load_data()
 
-        # load the data
-        mini_image_net_data = datasets.ImageFolder(root=path)
+    @abstractmethod
+    def _load_data(self):
+        pass
 
-        class_splits = self._split_classes(mini_image_net_data)
-        self.subsets = self._create_subsets(mini_image_net_data, class_splits)
-        
-    def _split_classes(self, data: datasets.ImageFolder) -> dict[str, list[str]]:
-        # Split the data classes into training, validation and test sets
-        all_classes = data.classes
-        shuffle(all_classes)
+    @abstractmethod
+    def __iter__(self):
+        pass
 
-        # Split the classes into training, validation and test classes
-        train_classes = all_classes[:int(self.class_frac["train"] * len(all_classes))]
-        validation_classes = all_classes[int(self.class_frac["train"] * len(all_classes)):int((self.class_frac["train"] + self.class_frac["validation"]) * len(all_classes))]
-        test_classes = all_classes[int((self.class_frac["train"] + self.class_frac["validation"]) * len(all_classes)):]
+class MiniImageNetDataset(DatasetBase):
+    def __init__(self, base_dir: str | Path, k_way: int, k_shot: int, k_query: int, n_episodes: int, mode: str = "train", transform: transforms.Compose = None, target_transform: transforms.Compose = None) -> None:
+        super().__init__(base_dir, k_way, k_shot, k_query, n_episodes, mode, transform or transforms.Compose([transforms.Resize((84, 84)), transforms.ToTensor()]), target_transform)
 
-        return {"train": train_classes, "validation": validation_classes, "test": test_classes}
+    def _load_data(self):
+        self.dataset = datasets.ImageFolder(os.path.join(self.base_dir, self.mode))
+
+    def __iter__(self) -> dict[str, torch.Tensor]:
+        # Organize samples by class
+        self.samples_per_class = defaultdict(list)
+        for idx, (path, label) in enumerate(self.dataset.samples):
+            self.samples_per_class[label].append(idx)
+        print(self.transform)
+        for _ in range(self.n_episodes):
+            classes = np.random.choice(list(self.samples_per_class.keys()), self.k_way, replace=False)
+            datapoints: dict[str, list] = defaultdict(list)
+            for cls_idx in classes:
+                selected_indices = np.random.choice(self.samples_per_class[cls_idx], self.k_shot + self.k_query, replace=False)
+                for idx in selected_indices:
+                    # transform
+                    image_transformed = self.transform(self.dataset[idx][0])
+                    class_transformed = self.target_transform(cls_idx)
+
+                    datapoints[class_transformed].append(image_transformed)
+            # convert the list of tensors to a tensor
+            for cls in datapoints:
+                datapoints[cls] = torch.stack(datapoints[cls])
+            yield datapoints
 
 
-    def _create_subsets(self, data: datasets.ImageFolder, class_splits: dict[str, list[str]]) -> dict[str, Subset]:
-        # From each class, sample the number of examples specified in train_val_test_example_size
-        subsets = {}
-        indices_by_class = defaultdict(list)
-        for idx, (_, label) in enumerate(data.samples):
-            indices_by_class[label].append(idx)
 
-        for subset, classes in class_splits.items():
-            selected_idx = []
-            for cls in classes:
-                cls_idx = data.class_to_idx[cls]
-                indices = indices_by_class[cls_idx]
-                if len(indices) < self.example_size[subset]:
-                    selected_idx.extend(indices)
-                else:
-                    selected_idx.extend(random.sample(indices, self.example_size[subset]))
-            subsets[subset] = Subset(data, selected_idx)
 
-        return subsets
+                
 
-    def __len__(self):
-        return len(self.subsets[self.mode])
 
-    def __getitem__(self, index: int) -> Any:
-        data = self.subsets[self.mode]
-        img, label = data[index]
-
-        if self.transform:
-            img = self.transform(img)
-        if self.target_transform:
-            label = self.target_transform(label)
-
-        return img, label
-    
-    def set_mode(self, mode: str) -> None:
-        self.mode = mode
 
