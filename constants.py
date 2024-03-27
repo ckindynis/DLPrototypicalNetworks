@@ -10,3 +10,6 @@ class Modes:
     TRAIN = "train"
     TEST = "test"
     VAL = "validation"
+
+class AssetNames:
+    MODEL = "model.pth"

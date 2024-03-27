@@ -1,10 +1,12 @@
 from argparse import ArgumentParser
 from model.protonet import ProtoNetEncoder
 import torch
-from constants import Datasets, DistanceMetric, Modes
+from constants import Datasets, DistanceMetric, Modes, AssetNames
 from dataloader import DatasetBase, MiniImageNetDataset
 from tqdm import tqdm
-from model.protonet import protoLoss
+from model.helpers import protoLoss, EarlyStopper
+import numpy as np
+import os
 
 
 def train(
@@ -15,30 +17,48 @@ def train(
     lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
     device: str,
     num_epochs: int,
+    num_episodes_per_epoch: int,
     num_support_train: int,
     num_query_train: int,
     num_support_val: int,
     num_query_val: int,
-    num_validation_steps: int
-):  
-    
+    num_validation_steps: int,
+    early_stopping_patience: int,
+    early_stopping_delta: float,
+    save_path: str,
+):
+
     train_losses = []
     train_accuracies = []
     val_losses = []
     val_accuracies = []
+    best_val_loss = float("inf")
+    best_state = None
+
+    early_stopping = EarlyStopper(
+        patience=early_stopping_patience, min_delta=early_stopping_delta
+    )
+    save_model_path = os.path.join(save_path, AssetNames.MODEL)
 
     num_steps = 0
     for epoch in range(num_epochs):
-        for episode in tqdm(train_dataset):
-            print(f"Training: Step {num_steps} | Epoch {epoch}")
+        for episode_num, episode in enumerate(tqdm(train_dataset)):
+            print(f"Training epoch {epoch + 1} and episode {episode_num + 1}")
             model.train()
             num_steps += 1
             image_tensors, label_tensors = episode
-            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(device)
+            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(
+                device
+            )
 
             embeddings = model(image_tensors)
 
-            train_loss, train_acc = protoLoss(model_output=embeddings, target_output=label_tensors, n_support=num_support_train, n_query=num_query_train)
+            train_loss, train_acc = protoLoss(
+                model_output=embeddings,
+                target_output=label_tensors,
+                n_support=num_support_train,
+                n_query=num_query_train,
+            )
             train_loss.backward()
 
             optimiser.step()
@@ -46,27 +66,58 @@ def train(
             train_losses.append(train_loss.item())
             train_accuracies.append(train_acc.item())
 
-            print(f"Epoch: {epoch} | Step: {num_steps} | Train Acc: {train_acc} | Train Loss: {train_loss}")
-
-
             if num_steps % num_validation_steps == 0:
-                print(f"Doing validation at step {num_steps} epoch {epoch}")
-                
+                print(
+                    f"Performing validation at epoch {epoch + 1} and episode {episode_num + 1}"
+                )
+
                 for val_batch in validation_dataset:
                     model.eval()
 
                     val_image_tensors, val_labels = val_batch
-                    val_image_tensors, val_labels = val_image_tensors.to(device), val_labels.to(device)
+                    val_image_tensors, val_labels = val_image_tensors.to(
+                        device
+                    ), val_labels.to(device)
                     val_embeddings = model(val_image_tensors)
 
-                    val_loss, val_acc = protoLoss(model_output=val_embeddings, target_output=val_labels, n_support=num_support_val, n_query=num_query_val)
+                    val_loss, val_acc = protoLoss(
+                        model_output=val_embeddings,
+                        target_output=val_labels,
+                        n_support=num_support_val,
+                        n_query=num_query_val,
+                        distance_metric=DistanceMetric.EUCLID,
+                    )
 
                     val_losses.append(val_loss.item())
                     val_accuracies.append(val_acc.item())
 
+                avg_val_acc = round(
+                    np.mean(val_accuracies[-num_episodes_per_epoch:]), 3
+                )
+                avg_val_loss = np.mean(val_losses[-num_episodes_per_epoch:])
 
+                print(
+                    f"Epoch {epoch + 1} | Validation Accuracy: {avg_val_acc} | Validation Loss: {avg_val_loss}"
+                )
 
-            
+                if early_stopping.early_stop()
+
+                if best_val_loss > avg_val_acc:
+                    print(
+                        f"New validation loss {avg_val_loss} is better than previous val loss {best_val_loss}. Saving model."
+                    )
+                    torch.save(model.state_dict(), save_model_path)
+                    best_val_loss = avg_val_loss
+                    best_state = model.state_dict()
+
+        avg_train_acc = round(np.mean(train_accuracies[-num_episodes_per_epoch:]), 3)
+        avg_train_loss = np.mean(train_accuracies[-num_episodes_per_epoch:])
+
+        print(f"Epoch {epoch + 1} | Train Accuracy: {avg_train_acc} | Train loss Loss: {avg_train_loss}")
+        lr_scheduler.step()
+    
+    print("Training completed!")
+    return best_state, train_accuracies, train_losses, val_accuracies, val_losses
 
 
 if __name__ == "__main__":
@@ -105,7 +156,7 @@ if __name__ == "__main__":
         "--num_validation_steps",
         type=int,
         help="Number of steps after which you conduct validation",
-        default=200,
+        default=10,
     )
 
     parser.add_argument(
@@ -140,28 +191,28 @@ if __name__ == "__main__":
         "--num_classes_train",
         type=int,
         help="Number of classes to use in an episode while training. This corresponts to the k in k-way n-shot learning.",
-        default=60,
+        default=5,
     )
 
     parser.add_argument(
         "--num_support_train",
         type=int,
         help="Number of support points to use in an episode while training. This corresponts to the n in k-way n-shot learning.",
-        default=5,
+        default=20,
     )
 
     parser.add_argument(
         "--num_query_train",
         type=int,
         help="Number of query points to use in an episode while training.",
-        default=5,
+        default=10,
     )
 
     parser.add_argument(
         "--num_classes_val",
         type=int,
         help="Number of classes to use in an episode during validation. This corresponts to the k in k-way n-shot learning.",
-        default=60,
+        default=5,
     )
 
     parser.add_argument(
@@ -222,6 +273,20 @@ if __name__ == "__main__":
         choices=[DistanceMetric.EUCLID, DistanceMetric.COSINE],
     )
 
+    parser.add_argument(
+        "--early_stopping_patience",
+        type=int,
+        help="Patience for early stopping",
+        default=3,
+    )
+
+    parser.add_argument(
+        "--early_stopping_delta",
+        type=float,
+        help="Delta for early stopping",
+        default=0.05,
+    )
+
     args = parser.parse_args()
 
     cuda_available = torch.cuda.is_available()
@@ -269,7 +334,7 @@ if __name__ == "__main__":
 
     # Add For Omniglot here
 
-    result = train(
+    best_state, train_accuracies, train_losses, val_accuracies, val_losses = train(
         model=model,
         train_dataset=train_dataset,
         validation_dataset=val_dataset,
@@ -277,9 +342,13 @@ if __name__ == "__main__":
         lr_scheduler=lr_scheduler,
         device=device,
         num_epochs=args.num_epochs,
+        num_episodes_per_epoch=args.num_episodes,
         num_query_train=args.num_query_train,
         num_support_train=args.num_support_train,
         num_query_val=args.num_query_val,
         num_support_val=args.num_support_val,
-        num_validation_steps=args.num_validation_steps
+        num_validation_steps=args.num_validation_steps,
+        early_stopping_patience=args.early_stopping_patience,
+        early_stopping_delta=args.early_stopping_delta,
+        save_path=args.save_path,
     )
