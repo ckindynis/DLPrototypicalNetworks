@@ -25,12 +25,12 @@ import shutil
  
 
 class DatasetBase(ABC):
-    def _init_(self, base_dir: str, k_way: int, k_shot: int, k_query: int, n_episodes: int, mode: str = "train", transform: transforms.Compose = None, target_transform: transforms.Compose = None) -> None:
+    def __init__(self, base_dir: str | Path, k_way: int, k_shot: int, k_query: int, n_episodes: int, mode: str = "train", transform: transforms.Compose = None, target_transform: transforms.Compose = None) -> None:
         self.k_way = k_way
         self.k_shot = k_shot
         self.k_query = k_query
-        self.transform = transform
-        self.target_transform = target_transform
+        self.transform = transform or transforms.Compose([])
+        self.target_transform = target_transform or transforms.Compose([])
         self.mode = mode
         self.base_dir = Path(base_dir)
         self.n_episodes = n_episodes
@@ -38,6 +38,10 @@ class DatasetBase(ABC):
 
     @abstractmethod
     def _load_data(self):
+        pass
+
+    @abstractmethod
+    def __iter__(self):
         pass
 
 class OmniglotDataset(DatasetBase):
@@ -116,121 +120,65 @@ class OmniglotDataset(DatasetBase):
 
         return data_images, data_labels
     ''''
-    def _iter_(self) -> dict[str, torch.Tensor]:
+    def __iter__(self) -> dict[str, torch.Tensor]:
+        # Organize samples by class
+        self.samples_per_class = defaultdict(list)
+        for idx, (path, label) in enumerate(self.dataset.samples):
+            self.samples_per_class[label].append(idx)
         for _ in range(self.n_episodes):
-            classes = np.random.choice(self.dataset.classes, self.k_way, replace=False)
-            datapoints = defaultdict(list)
-            for class_ in classes:
-                images = np.random.choice(self.dataset.class_to_idx[class_], self.k_shot + self.k_query, replace=False)
-                for i, image in enumerate(images):
-                    datapoints[class_].append(self.dataset[i][0])
+            classes = np.random.choice(list(self.samples_per_class.keys()), self.k_way, replace=False)
+            datapoints: dict[str, list] = defaultdict(list)
+            for cls_idx in classes:
+                selected_indices = np.random.choice(self.samples_per_class[cls_idx], self.k_shot + self.k_query, replace=False)
+                for idx in selected_indices:
+                    # transform
+                    image_transformed = self.transform(self.dataset[idx][0])
+                    class_transformed = self.target_transform(cls_idx)
+
+                    datapoints[class_transformed].append(image_transformed)
             # convert the list of tensors to a tensor
-            for class_ in datapoints:
-                datapoints[class_] = torch.stack(datapoints[class_])
+            for cls in datapoints:
+                datapoints[cls] = torch.stack(datapoints[cls])
             yield datapoints
     '''
-    def __iter__(self):
+    def __iter__(self) -> dict[str, torch.Tensor]: # type: ignore
+        print("Data: ", self.data_labels)    #  <torch.utils.data.dataset.Subset object at 0x000001E6FCA31288>
+        print("Type: ", type(self.data_labels)) #  <class 'torch.utils.data.dataset.Subset'>
+        print("Data of images: ", self.data_images)
+        print("Type of images: ", type(self.data_images))   # <class 'torch.utils.data.dataset.Subset'>
+        # Access the first element of the Subset object
+        print("First element of data: ", self.data_labels[0])  # 0
+
+        # Implement the iteration functionality 
+        # we have the labels in the data_labels and the images in the data_images
+        # we need to create the episodes
         for _ in range(self.n_episodes):
-            classes = np.random.choice(self.data_labels, self.k_way, replace=False)
-            datapoints = defaultdict(list)
-            for class_ in classes:
-                datapoints[class_].append(self.data_images[self.data_labels.index(class_)])
-            for class_ in datapoints:
-                datapoints[class_] = torch.stack(datapoints[class_])
+            # Select k_way classes randomly
+            classes = np.random.choice(list(self.data_labels), self.k_way, replace=False)
+            datapoints: dict[str, list] = defaultdict(list)
+            for cls_idx in classes:
+                selected_indices = np.random.choice(self.data_labels[cls_idx], self.k_shot + self.k_query, replace=False)
+                for idx in selected_indices:
+                    # transform
+                    image_transformed = self.transform(self.data_images[idx])
+                    class_transformed = self.target_transform(cls_idx)
+
+                    datapoints[class_transformed].append(image_transformed)
+            # convert the list of tensors to a tensor
+            for cls in datapoints:
+                datapoints[cls] = torch.stack(datapoints[cls])
             yield datapoints
-            
-
-
-# class MiniImageNetDataset(Dataset):
-#     def __init__(self, path : str | Path, train_val_test_class_frac: 'list[float]' = None, train_val_test_example_size: 'list[int]' = None, mode: str = "train") -> None:
-#         if train_val_test_class_frac is None:
-#             train_val_test_class_frac = [0.64, 0.16, 0.2]
-#         if train_val_test_example_size is None:
-#             train_val_test_example_size = [1, 1, 15]
-
-#         assert sum(train_val_test_class_frac) == 1, "The sum of the fractions must be equal to 1"
-
-#         self.mode = mode
-#         self.class_frac = {"train": train_val_test_class_frac[0],
-#                            "validation": train_val_test_class_frac[1],
-#                            "test": train_val_test_class_frac[2]
-#                            }
-#         self.example_size = {"train": train_val_test_example_size[0],
-#                              "validation": train_val_test_example_size[1],
-#                              "test": train_val_test_example_size[2]
-#                              }
-#         self.path = path
-#         self.transform = transforms.Compose([
-#             transforms.Resize((84, 84)),
-#             transforms.ToTensor()
-#         ])
-#         self.transform = None
-#         self.target_transform = None
-
-#         # load the data
-#         mini_image_net_data = datasets.ImageFolder(root=path)
-
-#         class_splits = self._split_classes(mini_image_net_data)
-#         self.subsets = self._create_subsets(mini_image_net_data, class_splits)
-        
-#     def _split_classes(self, data: datasets.ImageFolder) -> dict[str, list[str]]:
-#         # Split the data classes into training, validation and test sets
-#         all_classes = data.classes
-#         shuffle(all_classes)
-
-#         # Split the classes into training, validation and test classes
-#         train_classes = all_classes[:int(self.class_frac["train"] * len(all_classes))]
-#         validation_classes = all_classes[int(self.class_frac["train"] * len(all_classes)):int((self.class_frac["train"] + self.class_frac["validation"]) * len(all_classes))]
-#         test_classes = all_classes[int((self.class_frac["train"] + self.class_frac["validation"]) * len(all_classes)):]
-
-#         return {"train": train_classes, "validation": validation_classes, "test": test_classes}
-
-
-#     def _create_subsets(self, data: datasets.ImageFolder, class_splits: dict[str, list[str]]) -> dict[str, Subset]:
-#         # From each class, sample the number of examples specified in train_val_test_example_size
-#         subsets = {}
-#         indices_by_class = defaultdict(list)
-#         for idx, (_, label) in enumerate(data.samples):
-#             indices_by_class[label].append(idx)
-
-#         for subset, classes in class_splits.items():
-#             selected_idx = []
-#             for cls in classes:
-#                 cls_idx = data.class_to_idx[cls]
-#                 indices = indices_by_class[cls_idx]
-#                 if len(indices) < self.example_size[subset]:
-#                     selected_idx.extend(indices)
-#                 else:
-#                     selected_idx.extend(random.sample(indices, self.example_size[subset]))
-#             subsets[subset] = Subset(data, selected_idx)
-
-#         return subsets
-
-#     def __len__(self):
-#         return len(self.subsets[self.mode])
-
-#     def __getitem__(self, index: int) -> Any:
-#         data = self.subsets[self.mode]
-#         img, label = data[index]
-
-#         if self.transform:
-#             img = self.transform(img)
-#         if self.target_transform:
-#             label = self.target_transform(label)
-
-#         return img, label
-    
-#     def set_mode(self, mode: str) -> None:
-#         self.mode = mode
 
 
 if __name__ == "__main__":
     # test the Omniglot dataset
     print("Testing the Omniglot dataset")
-    omniglot_train = OmniglotDataset()._init_(mode="validation", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=1000)
-    omniglot_val = OmniglotDataset()._init_(mode="validation", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=1000)
-    omniglot_test = OmniglotDataset()._init_(mode="test", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=1000)
-
+    omniglot_train = OmniglotDataset(mode="train", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=10)
+    omniglot_val = OmniglotDataset(mode="validation", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=10)
+    omniglot_test = OmniglotDataset(mode="test", base_dir=os.path.join(f"{__file__}", "..", "data", "omniglot"), k_way=5, k_shot=1, k_query=1, n_episodes=10)
+    # check if iterating over the dataset works
+    for episode in omniglot_train.__iter__():
+        print(episode)
 
     # # test the MiniImageNet dataset
     # mini_image_net = MiniImageNetDataset(path=os.path.join(f"{__file__}", "..", "data", "mini-imagenet"))
