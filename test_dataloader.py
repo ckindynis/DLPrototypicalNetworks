@@ -52,6 +52,7 @@ def test_mini_image_net_dataset():
     for datapoints, labels in dataset:
         assert datapoints.shape == (30, 3, 84, 84)
         assert labels.shape == (30,)
+        assert np.unique(labels.numpy()).shape[0] == 5
         n_episodes += 1
     assert n_episodes == 100
 
@@ -62,6 +63,7 @@ def test_mini_image_net_dataset():
     for datapoints, labels in dataset:
         assert datapoints.shape == (35, 3, 84, 84)
         assert labels.shape == (35,)
+        assert np.unique(labels.numpy()).shape[0] == 5
         n_episodes += 1
     assert n_episodes == 100
 
@@ -72,6 +74,7 @@ def test_mini_image_net_dataset():
     for datapoints, labels in dataset:
         assert datapoints.shape == (42, 3, 84, 84)
         assert labels.shape == (42,)
+        assert np.unique(labels.numpy()).shape[0] == 6
         n_episodes += 1
     assert n_episodes == 100
 
