@@ -1,4 +1,6 @@
 from argparse import ArgumentParser
+from datetime import datetime
+
 from model.protonet import ProtoNetEncoder
 import torch
 from constants import Datasets, DistanceMetric, Modes, AssetNames
@@ -100,15 +102,21 @@ def train(
                     f"Epoch {epoch + 1} | Validation Accuracy: {avg_val_acc} | Validation Loss: {avg_val_loss}"
                 )
 
-                if early_stopping.early_stop()
+                # TODO activate this later
+                # if early_stopping.early_stop(avg_val_loss):
+                #     print(
+                #         f"Early stopping at epoch {epoch + 1} with validation loss {avg_val_loss}"
+                #     )
+                #     break
 
                 if best_val_loss > avg_val_acc:
                     print(
                         f"New validation loss {avg_val_loss} is better than previous val loss {best_val_loss}. Saving model."
                     )
-                    torch.save(model.state_dict(), save_model_path)
                     best_val_loss = avg_val_loss
                     best_state = model.state_dict()
+                    # torch.save(model.state_dict(), save_model_path)
+                torch.save(model.state_dict(), save_model_path.replace(".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"))  # TODO: for now always saving the models
 
         avg_train_acc = round(np.mean(train_accuracies[-num_episodes_per_epoch:]), 3)
         avg_train_loss = np.mean(train_accuracies[-num_episodes_per_epoch:])

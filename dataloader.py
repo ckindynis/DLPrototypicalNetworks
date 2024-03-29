@@ -140,11 +140,11 @@ class DatasetBase(ABC):
         pass
 
     @abstractmethod
-    def __iter__(self) -> tuple[torch.Tensor, torch.Tensor]:
+    def __iter__(self) -> "DatasetBase":
         pass
 
     @abstractmethod
-    def __next__(self):
+    def __next__(self) -> tuple[torch.Tensor, torch.Tensor]:
         pass
 
 class MiniImageNetDataset(DatasetBase):
@@ -164,11 +164,11 @@ class MiniImageNetDataset(DatasetBase):
         for idx, (path, label) in enumerate(self.dataset.samples):
             self.samples_per_class[label].append(idx)
 
-    def __iter__(self):
+    def __iter__(self) -> "MiniImageNetDataset":
         self.episode_count = 0
         return self
 
-    def __next__(self):
+    def __next__(self) -> tuple[torch.Tensor, torch.Tensor]:
         if self.episode_count == self.n_episodes:
             raise StopIteration
 
