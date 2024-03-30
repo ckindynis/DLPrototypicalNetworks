@@ -73,50 +73,51 @@ def train(
                     f"Performing validation at epoch {epoch + 1} and episode {episode_num + 1}"
                 )
 
-                for val_batch in validation_dataset:
-                    model.eval()
+                model.eval()  # Needed, as we are using BatchNorm2d (see https://pytorch.org/docs/stable/notes/autograd.html#evaluation-mode-nn-module-eval)
 
-                    val_image_tensors, val_labels = val_batch
-                    val_image_tensors, val_labels = val_image_tensors.to(
-                        device
-                    ), val_labels.to(device)
-                    val_embeddings = model(val_image_tensors)
+                with torch.inference_mode():    # See: https://pytorch.org/docs/stable/notes/autograd.html#inference-mode. If errors occur, change this to torch.no_grad()
+                    for val_batch in validation_dataset:
+                        val_image_tensors, val_labels = val_batch
+                        val_image_tensors, val_labels = val_image_tensors.to(
+                            device
+                        ), val_labels.to(device)
+                        val_embeddings = model(val_image_tensors)
 
-                    val_loss, val_acc = protoLoss(
-                        model_output=val_embeddings,
-                        target_output=val_labels,
-                        n_support=num_support_val,
-                        n_query=num_query_val,
-                        distance_metric=DistanceMetric.EUCLID,
+                        val_loss, val_acc = protoLoss(
+                            model_output=val_embeddings,
+                            target_output=val_labels,
+                            n_support=num_support_val,
+                            n_query=num_query_val,
+                            distance_metric=DistanceMetric.EUCLID,
+                        )
+
+                        val_losses.append(val_loss.item())
+                        val_accuracies.append(val_acc.item())
+
+                    avg_val_acc = round(
+                        np.mean(val_accuracies[-num_episodes_per_epoch:]), 3
                     )
+                    avg_val_loss = np.mean(val_losses[-num_episodes_per_epoch:])
 
-                    val_losses.append(val_loss.item())
-                    val_accuracies.append(val_acc.item())
-
-                avg_val_acc = round(
-                    np.mean(val_accuracies[-num_episodes_per_epoch:]), 3
-                )
-                avg_val_loss = np.mean(val_losses[-num_episodes_per_epoch:])
-
-                print(
-                    f"Epoch {epoch + 1} | Validation Accuracy: {avg_val_acc} | Validation Loss: {avg_val_loss}"
-                )
-
-                # TODO activate this later
-                # if early_stopping.early_stop(avg_val_loss):
-                #     print(
-                #         f"Early stopping at epoch {epoch + 1} with validation loss {avg_val_loss}"
-                #     )
-                #     break
-
-                if best_val_loss > avg_val_acc:
                     print(
-                        f"New validation loss {avg_val_loss} is better than previous val loss {best_val_loss}. Saving model."
+                        f"Epoch {epoch + 1} | Validation Accuracy: {avg_val_acc} | Validation Loss: {avg_val_loss}"
                     )
-                    best_val_loss = avg_val_loss
-                    best_state = model.state_dict()
-                    # torch.save(model.state_dict(), save_model_path)
-                torch.save(model.state_dict(), save_model_path.replace(".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"))  # TODO: for now always saving the models
+
+                    # TODO activate this later
+                    # if early_stopping.early_stop(avg_val_loss):
+                    #     print(
+                    #         f"Early stopping at epoch {epoch + 1} with validation loss {avg_val_loss}"
+                    #     )
+                    #     break
+
+                    if best_val_loss > avg_val_acc:
+                        print(
+                            f"New validation loss {avg_val_loss} is better than previous val loss {best_val_loss}. Saving model."
+                        )
+                        best_val_loss = avg_val_loss
+                        best_state = model.state_dict()
+                        # torch.save(model.state_dict(), save_model_path)
+                    torch.save(model.state_dict(), save_model_path.replace(".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"))  # TODO: for now always saving the models
 
         avg_train_acc = round(np.mean(train_accuracies[-num_episodes_per_epoch:]), 3)
         avg_train_loss = np.mean(train_accuracies[-num_episodes_per_epoch:])
