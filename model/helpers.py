@@ -77,10 +77,14 @@ def protoLoss(
         # import pdb; pdb.set_trace()
         # Calculate log softmax of distances
         log_smax = torch.log_softmax(torch.stack(distance_list) / exp_sum, dim=0)
+        # print(distance_list)
+        # print(log_smax)
 
         # Calculate accuracy
         pred_output = torch.argmax(log_smax)
-        acc += pred_output.item() == query_targets[0][q_idx]
+        acc += episode_classes[pred_output.item()] == query_targets[0][q_idx].item()
+        # print(pred_output.item())
+        # print(query_targets[0][q_idx].item())
 
         # TODO: Fix this mess later
         c_idx = torch.where(episode_classes == query_targets[0][q_idx].item())[0].item()

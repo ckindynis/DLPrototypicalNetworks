@@ -47,6 +47,8 @@ def train(
         for episode_num, episode in enumerate(tqdm(train_dataset)):
             print(f"Training epoch {epoch + 1} and episode {episode_num + 1}")
             model.train()
+
+            optimiser.zero_grad()
             num_steps += 1
             image_tensors, label_tensors = episode
             image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(device)

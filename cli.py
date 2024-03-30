@@ -17,7 +17,7 @@ def run_experiment(
     save_path: str = typer.Option(..., help="Path where the experiment assets are saved."),
     num_epochs: int = typer.Option(10, help="Number of epochs for training."),
     num_episodes: int = typer.Option(100, help="Number of episodes per epoch."),
-    num_validation_steps: int = typer.Option(10, help="Number of steps after which you conduct validation."),
+    num_validation_steps: int = typer.Option(100, help="Number of steps after which you conduct validation."),
     learning_rate: float = typer.Option(0.001, help="Learning rate for training."),
     lr_decay_step: int = typer.Option(2000, help="The number of steps after which the learning rate decays."),
     lr_decay_gamma: float = typer.Option(0.5, help="Decay factor for the learning rate."),
