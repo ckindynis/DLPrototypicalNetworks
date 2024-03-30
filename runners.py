@@ -49,9 +49,7 @@ def train(
             model.train()
             num_steps += 1
             image_tensors, label_tensors = episode
-            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(
-                device
-            )
+            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(device)
 
             embeddings = model(image_tensors)
 
@@ -110,7 +108,7 @@ def train(
                     #     )
                     #     break
 
-                    if best_val_loss > avg_val_acc:
+                    if best_val_loss > avg_val_loss:
                         print(
                             f"New validation loss {avg_val_loss} is better than previous val loss {best_val_loss}. Saving model."
                         )
@@ -120,7 +118,7 @@ def train(
                     torch.save(model.state_dict(), save_model_path.replace(".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"))  # TODO: for now always saving the models
 
         avg_train_acc = round(np.mean(train_accuracies[-num_episodes_per_epoch:]), 3)
-        avg_train_loss = np.mean(train_accuracies[-num_episodes_per_epoch:])
+        avg_train_loss = np.mean(train_losses[-num_episodes_per_epoch:])
 
         print(f"Epoch {epoch + 1} | Train Accuracy: {avg_train_acc} | Train loss Loss: {avg_train_loss}")
         lr_scheduler.step()
