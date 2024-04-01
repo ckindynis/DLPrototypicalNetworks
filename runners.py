@@ -44,8 +44,7 @@ def train(
 
     num_steps = 0
     for epoch in range(num_epochs):
-        for episode_num, episode in enumerate(tqdm(train_dataset)):
-            print(f"Training epoch {epoch + 1} and episode {episode_num + 1}")
+        for episode_num, episode in enumerate(tqdm(train_dataset, desc=f"Doing episodes for epoch {epoch + 1}", total=num_episodes_per_epoch)):
             model.train()
 
             optimiser.zero_grad()
