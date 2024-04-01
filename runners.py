@@ -69,13 +69,13 @@ def train(
 
             if num_steps % num_validation_steps == 0:
                 print(
-                    f"Performing validation at epoch {epoch + 1} and episode {episode_num + 1}"
+                    f"\nPerforming validation at epoch {epoch + 1} and episode {episode_num + 1}"
                 )
 
                 model.eval()  # Needed, as we are using BatchNorm2d (see https://pytorch.org/docs/stable/notes/autograd.html#evaluation-mode-nn-module-eval)
 
                 with torch.inference_mode():    # See: https://pytorch.org/docs/stable/notes/autograd.html#inference-mode. If errors occur, change this to torch.no_grad()
-                    for val_batch in validation_dataset:
+                    for val_batch in tqdm(validation_dataset, desc=f"Doing validation episodes for epoch {epoch + 1}", total=validation_dataset.n_episodes):
                         val_image_tensors, val_labels = val_batch
                         val_image_tensors, val_labels = val_image_tensors.to(
                             device

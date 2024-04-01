@@ -173,12 +173,12 @@ class MiniImageNetDataset(DatasetBase):
             raise StopIteration
 
         # Organize samples by class
-        classes = np.random.choice(list(self.samples_per_class.keys()), self.k_way, replace=False)
+        classes = np.random.choice(list(self.samples_per_class.keys()), min(self.k_way, len(self.samples_per_class)), replace=False)
         data = []
         labels = []
 
         for cls_idx in classes:
-            selected_indices = np.random.choice(self.samples_per_class[cls_idx], self.k_shot + self.k_query, replace=False)
+            selected_indices = np.random.choice(self.samples_per_class[cls_idx], min(self.k_shot + self.k_query, len(self.samples_per_class[cls_idx])), replace=False)
             for idx in selected_indices:
                 # transform
                 image_transformed = self.transform(self.dataset[idx][0])
