@@ -16,7 +16,6 @@ def euclidean_distance(tensor1, tensor2):
 
     return distances
 
-
 def protoLoss(
     model_output: torch.Tensor,
     target_output: torch.Tensor,
@@ -33,60 +32,30 @@ def protoLoss(
     """
 
     # Get unique classes in the episode
-    episode_classes = torch.unique(target_output)
+    episode_classes = torch.unique_consecutive(target_output)
 
-    # Extract support and query points for each class
-    support_points = []
-    query_points = []
-    query_targets = []
-    for c in episode_classes:
-        support_points.append(model_output[target_output == c][:n_support])
-        query_points.append(
-            model_output[target_output == c][n_support : n_support + n_query]
-        )
-        query_targets.append(
-            target_output[target_output == c][n_support : n_support + n_query]
-        )
+    reshaped_tensor = model_output.view(-1, n_support+n_query, model_output.size(1))
 
-    # View each query point independently
-    query_points = torch.stack(query_points).view(-1, len(episode_classes) * n_query)
-    query_targets = torch.stack(query_targets).view(-1, len(episode_classes) * n_query)
+    support_points = reshaped_tensor[:, :n_support, :]
+    query_points = reshaped_tensor[:, n_support:, :].reshape(len(episode_classes)*n_query, model_output.size(1))
+    query_targets = target_output.view(-1, n_support+n_query)[:, n_support:].reshape(1, len(episode_classes)*n_query)
 
-    # Calculate barycenters for each class
-    barycenters = torch.stack([torch.mean(s, dim=0) for s in support_points])
+    barycenters = support_points.mean(dim=1)
 
-    # Init loss
+    query_indexes = [i // n_query for i in range(len(query_targets[0]))]
+
+    ds = torch.cdist(query_points, barycenters)
+
+    log_smax = torch.log_softmax(-ds, dim=1)
+    
+    pred_output = torch.argmax(log_smax, dim=1)
+
     loss = 0
-    acc = 0
+    loss = -log_smax[torch.arange(log_smax.size(0)), torch.tensor(query_indexes)].mean()
 
-    # Calculate loss for each query point
-    for q_idx in range(query_points.shape[1]):
-        distance_list = []
-        # Calculate distance to each barycenter
-        for c in range(len(episode_classes)):
+    acc = torch.sum(episode_classes[pred_output] == query_targets[0]).item() / len(query_targets[0]*len(episode_classes))
 
-            if distance_metric == DistanceMetric.EUCLID:
-                distances = torch.cdist(
-                    query_points[:, q_idx].unsqueeze(0), barycenters[c].unsqueeze(0)
-                )
-            # Add for other distance metrics
-            distance_list.append(-distances)
-
-        # Calculate log softmax of distances
-        log_smax = torch.log_softmax(torch.stack(distance_list), dim=0)
-
-        # Calculate accuracy
-        pred_output = torch.argmax(log_smax)
-        acc += episode_classes[pred_output.item()] == query_targets[0][q_idx].item()
-
-        # TODO: Fix this mess later
-        c_idx = torch.where(episode_classes == query_targets[0][q_idx].item())[0].item()
-
-        # Calculate loss for the query point, for true class
-        loss -= log_smax[c_idx]
-
-    # Return loss and normalized accuracy
-    return loss / (n_query * len(episode_classes)), acc / (n_query * len(episode_classes))
+    return loss, torch.tensor(acc)
 
 
 class EarlyStopper:

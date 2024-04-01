@@ -22,7 +22,7 @@ def run_experiment(
     save_path: str = typer.Option(
         ..., help="Path where the experiment assets are saved."
     ),
-    num_epochs: int = typer.Option(10, help="Number of epochs for training."),
+    num_epochs: int = typer.Option(100, help="Number of epochs for training."),
     num_episodes_train: int = typer.Option(None, help="Number of episodes per epoch for training."),
     num_episodes_test: int = typer.Option(None, help="Number of episodes to test on."),
     num_validation_steps: int = typer.Option(

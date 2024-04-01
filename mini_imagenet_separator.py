@@ -4,7 +4,8 @@ from random import shuffle
 if __name__ == '__main__':
     # separate the mini-imagenet dataset into 64 training and 20 testing and 16 validation classes
     # base_dir = "/Users/aditwhorra/Desktop/Delft/Q3/Deep Learning/Final Project/DLPrototypicalNetworks/data/archive"
-    base_dir = "C:/Users/Thanos/Desktop/Q3/DeepLearning/Project/DLPrototypicalNetworks/data/archive"
+    # base_dir = "C:/Users/Thanos/Desktop/Q3/DeepLearning/Project/DLPrototypicalNetworks/data/archive"
+    base_dir = "/kaggle/input/mini-imagenet"
     # iterate over subdirectories in the base directory
     subdirs = [subdir for subdir in Path(base_dir).iterdir() if subdir.is_dir()]
     shuffle(subdirs)
