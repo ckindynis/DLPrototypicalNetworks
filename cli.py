@@ -5,39 +5,93 @@ import typer
 from constants import Datasets, DistanceMetric, Modes
 from dataloader import MiniImageNetDataset
 from model.protonet import ProtoNetEncoder
-from runners import train
+from runners import train, test
+from configs import configuration, DatasetConfiguration
 
 app = typer.Typer()
 
 
 @app.command()
 def run_experiment(
-    dataset: Datasets = typer.Option(Datasets.MINIIMAGE, help="Name of the dataset to run the experiment."),
-    data_path: str = typer.Option(..., help="Path to the folder that contains the datasets."),
-    save_path: str = typer.Option(..., help="Path where the experiment assets are saved."),
+    dataset: Datasets = typer.Option(
+        Datasets.MINIIMAGE, help="Name of the dataset to run the experiment."
+    ),
+    data_path: str = typer.Option(
+        ..., help="Path to the folder that contains the datasets."
+    ),
+    save_path: str = typer.Option(
+        ..., help="Path where the experiment assets are saved."
+    ),
     num_epochs: int = typer.Option(10, help="Number of epochs for training."),
-    num_episodes: int = typer.Option(100, help="Number of episodes per epoch."),
-    num_validation_steps: int = typer.Option(100, help="Number of steps after which you conduct validation."),
-    learning_rate: float = typer.Option(1e-3, help="Learning rate for training."),
-    lr_decay_step: int = typer.Option(2000, help="The number of steps after which the learning rate decays."),
-    lr_decay_gamma: float = typer.Option(0.5, help="Decay factor for the learning rate."),
-    num_classes_train: int = typer.Option(20, help="Number of classes to use in an episode while training."),
-    num_support_train: int = typer.Option(5, help="Number of support points to use in an episode while training."),
-    num_query_train: int = typer.Option(15, help="Number of query points to use in an episode while training."),
-    num_classes_val: int = typer.Option(20, help="Number of classes to use in an episode during validation."),
-    num_support_val: int = typer.Option(5, help="Number of support points to use in an episode during validation."),
-    num_query_val: int = typer.Option(15, help="Number of query points to use in an episode during validation."),
-    conv_kernel_size: int = typer.Option(3, help="Kernel size for the convolutional layers in the ProtoNet Encoder."),
-    max_pool_kernel: int = typer.Option(2, help="Kernel size for max pooling in the ProtoNet Encoder."),
-    num_filters: int = typer.Option(64, help="The number of output filters for each convolutional layer."),
-    num_conv_layers: int = typer.Option(4, help="The number of convolutional layers in the ProtoNet Encoder."),
-    embedding_size: int = typer.Option(None, help="An optional embedding size for the ProtoNet Encoder.", show_default=False),
-    distance_metric: DistanceMetric = typer.Option(DistanceMetric.EUCLID, help="The distance metric to use."),
+    num_episodes_train: int = typer.Option(None, help="Number of episodes per epoch for training."),
+    num_episodes_test: int = typer.Option(None, help="Number of episodes to test on."),
+    num_validation_steps: int = typer.Option(
+        100, help="Number of steps after which you conduct validation."
+    ),
+    learning_rate: float = typer.Option(None, help="Learning rate for training."),
+    lr_decay_step: int = typer.Option(
+        None, help="The number of steps after which the learning rate decays."
+    ),
+    lr_decay_gamma: float = typer.Option(
+        None, help="Decay factor for the learning rate."
+    ),
+    num_classes_train: int = typer.Option(
+        None, help="Number of classes to use in an episode while training."
+    ),
+    num_support_train: int = typer.Option(
+        None, help="Number of support points to use in an episode while training."
+    ),
+    num_query_train: int = typer.Option(
+        None, help="Number of query points to use in an episode while training."
+    ),
+    num_classes_val: int = typer.Option(
+        None, help="Number of classes to use in an episode during validation."
+    ),
+    num_support_val: int = typer.Option(
+        None, help="Number of support points to use in an episode during validation."
+    ),
+    num_query_val: int = typer.Option(
+        None, help="Number of query points to use in an episode during validation."
+    ),
+    conv_kernel_size: int = typer.Option(
+        3, help="Kernel size for the convolutional layers in the ProtoNet Encoder."
+    ),
+    max_pool_kernel: int = typer.Option(
+        2, help="Kernel size for max pooling in the ProtoNet Encoder."
+    ),
+    num_filters: int = typer.Option(
+        64, help="The number of output filters for each convolutional layer."
+    ),
+    num_conv_layers: int = typer.Option(
+        4, help="The number of convolutional layers in the ProtoNet Encoder."
+    ),
+    embedding_size: int = typer.Option(
+        None,
+        help="An optional embedding size for the ProtoNet Encoder.",
+        show_default=False,
+    ),
+    distance_metric: DistanceMetric = typer.Option(
+        DistanceMetric.EUCLID, help="The distance metric to use."
+    ),
     early_stopping_patience: int = typer.Option(3, help="Patience for early stopping."),
-    early_stopping_delta: float = typer.Option(0.05, help="Delta for early stopping.")
+    early_stopping_delta: float = typer.Option(0.05, help="Delta for early stopping."),
 ):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
+    # Taking default for dataset if these arguments are not passed
+    dataset_configuration: DatasetConfiguration = configuration[dataset]
+    num_episodes_train = num_episodes_train or dataset_configuration.num_episodes_train
+    num_episodes_test = num_episodes_test or dataset_configuration.num_episodes_test
+    learning_rate = learning_rate or dataset_configuration.learning_rate
+    lr_decay_step = lr_decay_step or dataset_configuration.lr_decay_step
+    lr_decay_gamma = lr_decay_gamma or dataset_configuration.lr_decay_gamma
+    num_classes_train = num_classes_train or dataset_configuration.num_classes_train
+    num_support_train = num_support_train or dataset_configuration.num_support_train
+    num_query_train = num_query_train or dataset_configuration.num_query_train
+    num_classes_val = num_classes_val or dataset_configuration.num_classes_val
+    num_support_val = num_support_val or dataset_configuration.num_support_val
+    num_query_val = num_query_val or dataset_configuration.num_query_val
+    
     if dataset == Datasets.OMNIGLOT:
         in_channels = 1
         original_embedding_size = 64
@@ -67,15 +121,23 @@ def run_experiment(
                 k_way=num_classes_train,
                 k_shot=num_support_train,
                 k_query=num_query_train,
-                n_episodes=num_episodes,
+                n_episodes=num_episodes_train,
             )
             val_dataset = MiniImageNetDataset(
                 base_dir=data_path,
                 k_way=num_classes_val,
                 k_shot=num_support_val,
                 k_query=num_query_val,
-                n_episodes=num_episodes,
+                n_episodes=num_episodes_train,
                 mode=Modes.VAL,
+            )
+            test_dataset = MiniImageNetDataset(
+                base_dir=data_path,
+                k_way=num_classes_val,
+                k_shot=num_support_val,
+                k_query=num_query_val,
+                n_episodes=num_episodes_test,
+                mode=Modes.TEST,
             )
 
         # TODO Add For Omniglot here
@@ -88,7 +150,7 @@ def run_experiment(
             lr_scheduler=lr_scheduler,
             device=device,
             num_epochs=num_epochs,
-            num_episodes_per_epoch=num_episodes,
+            num_episodes_per_epoch=num_episodes_train,
             num_query_train=num_query_train,
             num_support_train=num_support_train,
             num_query_val=num_query_val,
@@ -97,8 +159,17 @@ def run_experiment(
             early_stopping_patience=early_stopping_patience,
             early_stopping_delta=early_stopping_delta,
             save_path=save_path,
+            distance_metric=distance_metric,
         )
 
+        test(
+            model=model,
+            test_dataset=test_dataset,
+            device=device,
+            num_query_test=num_query_val,
+            num_support_test=num_support_val,
+            distance_metric=distance_metric,
+        )
 
 
 if __name__ == "__main__":

@@ -11,6 +11,74 @@ import numpy as np
 import os
 
 
+def validation(
+    model: ProtoNetEncoder,
+    validation_dataset: DatasetBase,
+    device: str,
+    num_support_val: int,
+    num_query_val: int,
+    distance_metric: str,
+):
+    val_losses = []
+    val_accuracies = []
+
+    model.eval()  # Needed, as we are using BatchNorm2d (see https://pytorch.org/docs/stable/notes/autograd.html#evaluation-mode-nn-module-eval)
+    with torch.inference_mode():  # See: https://pytorch.org/docs/stable/notes/autograd.html#inference-mode. If errors occur, change this to torch.no_grad()
+        for val_batch in validation_dataset:
+            val_image_tensors, val_labels = val_batch
+            val_image_tensors, val_labels = val_image_tensors.to(device), val_labels.to(
+                device
+            )
+            val_embeddings = model(val_image_tensors)
+
+            val_loss, val_acc = protoLoss(
+                model_output=val_embeddings,
+                target_output=val_labels,
+                n_support=num_support_val,
+                n_query=num_query_val,
+                distance_metric=distance_metric,
+            )
+
+            val_losses.append(val_loss.item())
+            val_accuracies.append(val_acc.item())
+
+    return val_losses, val_accuracies
+
+
+def test(
+    model: ProtoNetEncoder,
+    test_dataset: DatasetBase,
+    device: str,
+    num_support_test: int,
+    num_query_test: int,
+    distance_metric: str,
+):
+    print("Running testing...")
+    test_accuracy = []
+
+    model.eval()
+    with torch.inference_mode():
+        for test_batch in test_dataset:
+            test_image_tensors, test_labels = test_batch
+            test_image_tensors, test_labels = test_image_tensors.to(
+                device
+            ), test_labels.to(device)
+            test_embeddings = model(test_image_tensors)
+
+            _, test_acc = protoLoss(
+                model_output=test_embeddings,
+                target_output=test_labels,
+                n_support=num_support_test,
+                n_query=num_query_test,
+                distance_metric=distance_metric,
+            )
+            test_accuracy.append(test_acc.item())
+
+    avg_accuracy = np.mean(test_accuracy)
+
+    print(f"Final test Accuracy is {avg_accuracy}")
+
+
 def train(
     model: ProtoNetEncoder,
     train_dataset: DatasetBase,
@@ -27,6 +95,7 @@ def train(
     num_validation_steps: int,
     early_stopping_patience: int,
     early_stopping_delta: float,
+    distance_metric: str,
     save_path: str,
 ):
 
@@ -50,7 +119,9 @@ def train(
             optimiser.zero_grad()
             num_steps += 1
             image_tensors, label_tensors = episode
-            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(device)
+            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(
+                device
+            )
 
             embeddings = model(image_tensors)
 
@@ -59,6 +130,7 @@ def train(
                 target_output=label_tensors,
                 n_support=num_support_train,
                 n_query=num_query_train,
+                distance_metric=distance_metric,
             )
             train_loss.backward()
 
@@ -72,57 +144,56 @@ def train(
                     f"\nPerforming validation at epoch {epoch + 1} and episode {episode_num + 1}"
                 )
 
-                model.eval()  # Needed, as we are using BatchNorm2d (see https://pytorch.org/docs/stable/notes/autograd.html#evaluation-mode-nn-module-eval)
+                val_losses_run, val_accuracies_run = validation(
+                    model=model,
+                    validation_dataset=validation_dataset,
+                    device=device,
+                    num_support_val=num_support_val,
+                    num_query_val=num_query_val,
+                    distance_metric=distance_metric,
+                )
 
-                with torch.inference_mode():    # See: https://pytorch.org/docs/stable/notes/autograd.html#inference-mode. If errors occur, change this to torch.no_grad()
-                    for val_batch in tqdm(validation_dataset, desc=f"Doing validation episodes for epoch {epoch + 1}", total=validation_dataset.n_episodes):
-                        val_image_tensors, val_labels = val_batch
-                        val_image_tensors, val_labels = val_image_tensors.to(
-                            device
-                        ), val_labels.to(device)
-                        val_embeddings = model(val_image_tensors)
+                val_losses.extend(val_losses_run)
+                val_accuracies.extend(val_accuracies_run)
 
-                        val_loss, val_acc = protoLoss(
-                            model_output=val_embeddings,
-                            target_output=val_labels,
-                            n_support=num_support_val,
-                            n_query=num_query_val,
-                            distance_metric=DistanceMetric.EUCLID,
-                        )
+                avg_val_acc = round(
+                    np.mean(val_accuracies[-num_episodes_per_epoch:]), 3
+                )
+                avg_val_loss = np.mean(val_losses[-num_episodes_per_epoch:])
 
-                        val_losses.append(val_loss.item())
-                        val_accuracies.append(val_acc.item())
+                print(
+                    f"Epoch {epoch + 1} | Validation Accuracy: {avg_val_acc} | Validation Loss: {avg_val_loss}"
+                )
 
-                    avg_val_acc = round(
-                        np.mean(val_accuracies[-num_episodes_per_epoch:]), 3
-                    )
-                    avg_val_loss = np.mean(val_losses[-num_episodes_per_epoch:])
+                # TODO activate this later
+                # if early_stopping.early_stop(avg_val_loss):
+                #     print(
+                #         f"Early stopping at epoch {epoch + 1} with validation loss {avg_val_loss}"
+                #     )
+                #     break
 
+                if best_val_loss > avg_val_loss:
                     print(
-                        f"Epoch {epoch + 1} | Validation Accuracy: {avg_val_acc} | Validation Loss: {avg_val_loss}"
+                        f"New validation loss {avg_val_loss} is better than previous val loss {best_val_loss}. Saving model."
                     )
-
-                    # TODO activate this later
-                    # if early_stopping.early_stop(avg_val_loss):
-                    #     print(
-                    #         f"Early stopping at epoch {epoch + 1} with validation loss {avg_val_loss}"
-                    #     )
-                    #     break
-
-                    if best_val_loss > avg_val_loss:
-                        print(
-                            f"New validation loss {avg_val_loss} is better than previous val loss {best_val_loss}. Saving model."
-                        )
-                        best_val_loss = avg_val_loss
-                        best_state = model.state_dict()
-                        # torch.save(model.state_dict(), save_model_path)
-                    torch.save(model.state_dict(), save_model_path.replace(".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"))  # TODO: for now always saving the models
+                    best_val_loss = avg_val_loss
+                    best_state = model.state_dict()
+                    # torch.save(model.state_dict(), save_model_path)
+                torch.save(
+                    model.state_dict(),
+                    save_model_path.replace(
+                        ".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"
+                    ),
+                )  # TODO: for now always saving the models
+                
+            lr_scheduler.step()
 
         avg_train_acc = round(np.mean(train_accuracies[-num_episodes_per_epoch:]), 3)
         avg_train_loss = np.mean(train_losses[-num_episodes_per_epoch:])
 
-        print(f"Epoch {epoch + 1} | Train Accuracy: {avg_train_acc} | Train loss Loss: {avg_train_loss}")
-        lr_scheduler.step()
-    
+        print(
+            f"Epoch {epoch + 1} | Train Accuracy: {avg_train_acc} | Train Loss: {avg_train_loss}"
+        )
+
     print("Training completed!")
     return best_state, train_accuracies, train_losses, val_accuracies, val_losses

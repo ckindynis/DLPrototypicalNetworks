@@ -62,7 +62,6 @@ def protoLoss(
     # Calculate loss for each query point
     for q_idx in range(query_points.shape[1]):
         distance_list = []
-        exp_sum = 0
         # Calculate distance to each barycenter
         for c in range(len(episode_classes)):
 
@@ -71,30 +70,23 @@ def protoLoss(
                     query_points[:, q_idx].unsqueeze(0), barycenters[c].unsqueeze(0)
                 )
             # Add for other distance metrics
-            distance_list.append(torch.exp(-distances))
-            exp_sum += torch.exp(-distances)
+            distance_list.append(-distances)
 
-        # import pdb; pdb.set_trace()
         # Calculate log softmax of distances
-        log_smax = torch.log_softmax(torch.stack(distance_list) / exp_sum, dim=0)
-        # print(distance_list)
-        # print(log_smax)
+        log_smax = torch.log_softmax(torch.stack(distance_list), dim=0)
 
         # Calculate accuracy
         pred_output = torch.argmax(log_smax)
         acc += episode_classes[pred_output.item()] == query_targets[0][q_idx].item()
-        # print(pred_output.item())
-        # print(query_targets[0][q_idx].item())
 
         # TODO: Fix this mess later
         c_idx = torch.where(episode_classes == query_targets[0][q_idx].item())[0].item()
 
         # Calculate loss for the query point, for true class
-
         loss -= log_smax[c_idx]
 
     # Return loss and normalized accuracy
-    return loss, acc / (n_query * len(episode_classes))
+    return loss / (n_query * len(episode_classes)), acc / (n_query * len(episode_classes))
 
 
 class EarlyStopper:
