@@ -19,3 +19,9 @@ class Modes(str, Enum):
 
 class AssetNames(str, Enum):
     MODEL = "model.pth"
+
+class TensorboardAssets(str, Enum):
+    TRAIN_LOSS = "Loss/train"
+    TRAIN_ACC = "Accuracy/train"
+    VAL_LOSS = "Loss/validation"
+    VAL_ACC = "Accuracy/validation"

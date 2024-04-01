@@ -7,6 +7,8 @@ from dataloader import MiniImageNetDataset
 from model.protonet import ProtoNetEncoder
 from runners import train, test
 from configs import configuration, DatasetConfiguration
+from torch.utils.tensorboard import SummaryWriter
+import os
 
 app = typer.Typer()
 
@@ -92,6 +94,12 @@ def run_experiment(
     num_support_val = num_support_val or dataset_configuration.num_support_val
     num_query_val = num_query_val or dataset_configuration.num_query_val
     
+    tensorboard_log_dir = os.path.join(save_path, "Tensorboard")
+    if not os.path.exists(tensorboard_log_dir):
+        os.makedirs(tensorboard_log_dir)
+    
+    writer = SummaryWriter(log_dir=tensorboard_log_dir)
+    
     if dataset == Datasets.OMNIGLOT:
         in_channels = 1
         original_embedding_size = 64
@@ -160,6 +168,7 @@ def run_experiment(
             early_stopping_delta=early_stopping_delta,
             save_path=save_path,
             distance_metric=distance_metric,
+            writer=writer
         )
 
         test(
@@ -170,6 +179,8 @@ def run_experiment(
             num_support_test=num_support_val,
             distance_metric=distance_metric,
         )
+        
+        writer.close()
 
 
 if __name__ == "__main__":

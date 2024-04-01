@@ -1,14 +1,14 @@
-from argparse import ArgumentParser
 from datetime import datetime
 
 from model.protonet import ProtoNetEncoder
 import torch
-from constants import Datasets, DistanceMetric, Modes, AssetNames
-from dataloader import DatasetBase, MiniImageNetDataset
+from constants import TensorboardAssets, AssetNames
+from dataloader import DatasetBase
 from tqdm import tqdm
 from model.helpers import protoLoss, EarlyStopper
 import numpy as np
 import os
+from torch.utils.tensorboard import SummaryWriter
 
 
 def validation(
@@ -97,6 +97,7 @@ def train(
     early_stopping_delta: float,
     distance_metric: str,
     save_path: str,
+    writer: SummaryWriter,
 ):
 
     train_losses = []
@@ -113,7 +114,13 @@ def train(
 
     num_steps = 0
     for epoch in range(num_epochs):
-        for episode_num, episode in enumerate(tqdm(train_dataset, desc=f"Doing episodes for epoch {epoch + 1}", total=num_episodes_per_epoch)):
+        for episode_num, episode in enumerate(
+            tqdm(
+                train_dataset,
+                desc=f"Doing episodes for epoch {epoch + 1}",
+                total=num_episodes_per_epoch,
+            )
+        ):
             model.train()
 
             optimiser.zero_grad()
@@ -160,6 +167,9 @@ def train(
                     np.mean(val_accuracies[-num_episodes_per_epoch:]), 3
                 )
                 avg_val_loss = np.mean(val_losses[-num_episodes_per_epoch:])
+                
+                writer.add_scalar(TensorboardAssets.VAL_ACC, avg_val_acc, num_steps)
+                writer.add_scalar(TensorboardAssets.VAL_LOSS, avg_val_loss, num_steps)
 
                 print(
                     f"Epoch {epoch + 1} | Validation Accuracy: {avg_val_acc} | Validation Loss: {avg_val_loss}"
@@ -185,11 +195,14 @@ def train(
                         ".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"
                     ),
                 )  # TODO: for now always saving the models
-                
+
             lr_scheduler.step()
 
         avg_train_acc = round(np.mean(train_accuracies[-num_episodes_per_epoch:]), 3)
         avg_train_loss = np.mean(train_losses[-num_episodes_per_epoch:])
+        
+        writer.add_scalar(TensorboardAssets.TRAIN_ACC, avg_train_acc, epoch+1)
+        writer.add_scalar(TensorboardAssets.TRAIN_LOSS, avg_train_loss, epoch+1)
 
         print(
             f"Epoch {epoch + 1} | Train Accuracy: {avg_train_acc} | Train Loss: {avg_train_loss}"
