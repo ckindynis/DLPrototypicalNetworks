@@ -1,11 +1,13 @@
 from datetime import datetime
 
+from torch.utils.data import DataLoader, Dataset
+
 from model.protonet import ProtoNetEncoder
 import torch
 from constants import TensorboardAssets, AssetNames
 from dataloader import DatasetBase
 from tqdm import tqdm
-from model.helpers import protoLoss, EarlyStopper
+from model.helpers import protoLoss, EarlyStopper, dataloader_batch_removal_collate_fn
 import numpy as np
 import os
 from torch.utils.tensorboard import SummaryWriter
@@ -13,7 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 def validation(
     model: ProtoNetEncoder,
-    validation_dataset: DatasetBase,
+    validation_dataset: Dataset,
     device: str,
     num_support_val: int,
     num_query_val: int,
@@ -24,11 +26,9 @@ def validation(
 
     model.eval()  # Needed, as we are using BatchNorm2d (see https://pytorch.org/docs/stable/notes/autograd.html#evaluation-mode-nn-module-eval)
     with torch.inference_mode():  # See: https://pytorch.org/docs/stable/notes/autograd.html#inference-mode. If errors occur, change this to torch.no_grad()
-        for val_batch in validation_dataset:
-            val_image_tensors, val_labels = val_batch
-            val_image_tensors, val_labels = val_image_tensors.to(device), val_labels.to(
-                device
-            )
+        val_episode_loader = DataLoader(validation_dataset, batch_size=1, collate_fn=dataloader_batch_removal_collate_fn)
+        for episode_num, (val_image_tensors, val_labels) in enumerate(val_episode_loader):
+            val_image_tensors, val_labels = val_image_tensors.to(device), val_labels.to(device)
             val_embeddings = model(val_image_tensors)
 
             val_loss, val_acc = protoLoss(
@@ -114,21 +114,19 @@ def train(
 
     num_steps = 0
     for epoch in range(num_epochs):
-        for episode_num, episode in enumerate(
-            tqdm(
-                train_dataset,
-                desc=f"Doing episodes for epoch {epoch + 1}",
-                total=num_episodes_per_epoch,
-            )
+        train_episode_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=dataloader_batch_removal_collate_fn)
+        for episode_num, (image_tensors, label_tensors) in enumerate(
+                tqdm(
+                    train_episode_loader,
+                    desc=f"Doing episodes for epoch {epoch + 1}",
+                    total=num_episodes_per_epoch,
+                )
         ):
             model.train()
 
             optimiser.zero_grad()
             num_steps += 1
-            image_tensors, label_tensors = episode
-            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(
-                device
-            )
+            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(device)
 
             embeddings = model(image_tensors)
 
@@ -188,13 +186,9 @@ def train(
                     )
                     best_val_loss = avg_val_loss
                     best_state = model.state_dict()
-                    # torch.save(model.state_dict(), save_model_path)
-                torch.save(
-                    model.state_dict(),
-                    save_model_path.replace(
+                    torch.save(model.state_dict(), save_model_path.replace(
                         ".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"
-                    ),
-                )  # TODO: for now always saving the models
+                    ),)
 
             lr_scheduler.step()
 

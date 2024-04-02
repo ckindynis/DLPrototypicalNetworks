@@ -78,7 +78,7 @@ def run_experiment(
     early_stopping_patience: int = typer.Option(3, help="Patience for early stopping."),
     early_stopping_delta: float = typer.Option(0.05, help="Delta for early stopping."),
 ):
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Taking default for dataset if these arguments are not passed
     dataset_configuration: DatasetConfiguration = configuration[dataset]

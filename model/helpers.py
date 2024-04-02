@@ -74,3 +74,10 @@ class EarlyStopper:
             if self.counter >= self.patience:
                 return True
         return False
+
+
+def dataloader_batch_removal_collate_fn(batch):
+    # Since we're doing single episodes, batch should have a single element
+    data, labels = batch[0]
+    # No need to modify data or labels, as we're not really batching
+    return data, labels
