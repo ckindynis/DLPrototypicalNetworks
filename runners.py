@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 from model.protonet import ProtoNetEncoder
 import torch
 from constants import TensorboardAssets, AssetNames
+from torch.utils.data.dataloader import DataLoader
 from dataloader import DatasetBase
 from tqdm import tqdm
 from model.helpers import protoLoss, EarlyStopper, dataloader_batch_removal_collate_fn
