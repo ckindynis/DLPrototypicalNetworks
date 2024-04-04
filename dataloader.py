@@ -186,7 +186,7 @@ class MiniImageNetDataset(DatasetBase, Dataset):
         print(f"Time taken to load data: {time() - start_time:.2f} seconds for {self.mode} mode")
 
     def __len__(self):
-        return len(self.dataset)
+        return self.n_episodes
 
     def __getitem__(self, index):
         if index >= self.n_episodes:
