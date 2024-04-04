@@ -30,6 +30,8 @@ def protoLoss(
             n_query: number of examples per class in the query set
             distance_metric: The distance metric used to calculate distance between query and the barycenters
     """
+    model_output = model_output.to('cpu')
+    target_output = target_output.to('cpu')
 
     # Get unique classes in the episode
     episode_classes = torch.unique_consecutive(target_output)

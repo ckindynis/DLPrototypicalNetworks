@@ -1,4 +1,5 @@
 from datetime import datetime
+from time import time
 
 from torch.utils.data import DataLoader, Dataset
 
@@ -126,10 +127,15 @@ def train(
 
             optimiser.zero_grad()
             num_steps += 1
+            start_time = time()
             image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(device)
+            print(f"Time taken to move tensors to device: {time() - start_time}")
 
+            start_time = time()
             embeddings = model(image_tensors)
+            print(f"Time taken to get embeddings: {time() - start_time}")
 
+            start_time = time()
             train_loss, train_acc = protoLoss(
                 model_output=embeddings,
                 target_output=label_tensors,
@@ -137,10 +143,15 @@ def train(
                 n_query=num_query_train,
                 distance_metric=distance_metric,
             )
+            print(f"Time taken to calculate loss: {time() - start_time}")
+            start_time = time()
             train_loss.backward()
+            print(f"Time taken to backpropagate: {time() - start_time}")
 
+            start_time = time()
             optimiser.step()
-
+            print(f"Time taken to step optimiser: {time() - start_time}")
+            print("-"* 20)
             train_losses.append(train_loss.item())
             train_accuracies.append(train_acc.item())
 

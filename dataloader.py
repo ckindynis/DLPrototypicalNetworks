@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from pathlib import Path
 from random import shuffle
+from time import time
 from typing import Any
 
 import numpy as np
@@ -203,44 +204,45 @@ class MiniImageNetDataset(DatasetBase, Dataset):
                  target_transform: transforms.Compose = None) -> None:
 
         super().__init__(base_dir, k_way, k_shot, k_query, n_episodes, mode, transform or transforms.Compose([transforms.Resize((84, 84)), transforms.ToTensor()]), target_transform)
-        self._organize_samples()
+        # self._organize_samples()
         self.episode_count = 0
 
     def _load_data(self):
-        self.dataset = datasets.ImageFolder(os.path.join(self.base_dir, self.mode))
+        # preload all data and transform them
+        data = datasets.ImageFolder(os.path.join(self.base_dir, self.mode))
+        self.dataset = defaultdict(list)
+        for idx, (path, label) in enumerate(data.samples):
+            image = read_image(path)
+            image = self.transform(image)
+            label = self.target_transform(label)
+            self.dataset[label].append(image)
 
-    def _organize_samples(self):
-        self.samples_per_class = defaultdict(list)
-        for idx, (_, label) in enumerate(self.dataset.samples):
-            self.samples_per_class[label].append(idx)
+
+    # def _organize_samples(self):
+    #     self.samples_per_class = defaultdict(list)
+    #     for idx, (_, label) in enumerate(self.dataset.samples):
+    #         self.samples_per_class[label].append(idx)
 
     def __len__(self):
         return self.n_episodes
 
     def __getitem__(self, index):
+        start_time = time()
         if index >= self.n_episodes:
             raise IndexError("Index out of range")
 
         # Organize samples by class for the episode
-        classes = np.random.choice(list(self.samples_per_class.keys()), self.k_way, replace=False)
+        classes = np.random.choice(list(self.dataset.keys()), self.k_way, replace=False)
         data, labels = [], []
 
         for cls_idx in classes:
-            selected_indices = np.random.choice(self.samples_per_class[cls_idx], self.k_shot + self.k_query,
-                                                replace=False)
-            for idx in selected_indices:
-                image, _ = self.dataset[idx]  # ImageFolder returns (image, label)
-                if self.transform:
-                    image = self.transform(image)
-                if self.target_transform:
-                    cls_idx = self.target_transform(cls_idx)
-                data.append(image)
-                labels.append(cls_idx)
+            image_samples = np.random.choice(self.dataset[cls_idx], self.k_shot + self.k_query, replace=False)
+            data.extend(image_samples)
+            labels.extend([cls_idx] * (self.k_shot + self.k_query))
 
+        print(f"Time taken to load episode {index}: {time() - start_time:.2f} seconds")
         return torch.stack(data), torch.tensor(labels)
 
-
-                
 
 
 
