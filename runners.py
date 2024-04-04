@@ -115,7 +115,7 @@ def train(
 
     num_steps = 0
     for epoch in range(num_epochs):
-        train_episode_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=dataloader_batch_removal_collate_fn)
+        train_episode_loader = DataLoader(train_dataset, batch_size=1, collate_fn=dataloader_batch_removal_collate_fn)
         for episode_num, (image_tensors, label_tensors) in enumerate(
                 tqdm(
                     train_episode_loader,
