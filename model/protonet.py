@@ -16,6 +16,7 @@ class ConvBlock(nn.Module):
                 in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=conv_kernel_size,
+                padding=1
             ),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(),
