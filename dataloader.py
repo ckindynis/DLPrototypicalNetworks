@@ -21,29 +21,64 @@ import pandas as pd
 # TODO prevent download/transform if data is already downloaded/transformed  -> DONE
 # TODO think about how data is loaded with getitem
 # TODO make the same script for the other datasets (the miniImageNet version of ILSVRC-2012) (2011 version of the Caltech UCSD bird dataset)
- 
+
+
+IMG_CACHE = {}
+
 
 class OmnigotDataset(Dataset):
-    def __init__(self, annotations_file=None, img_dir=None, transform=None, target_transform=None) -> None:
+    def __init__(
+        self, annotations_file=None, img_dir=None, transform=None, target_transform=None
+    ) -> None:
         self.img_dir = img_dir or os.path.join(f"{__file__}", "..", "data", "omniglot")
         # self.download_url_prefix = "https://raw.githubusercontent.com/brendenlake/omniglot/master/python"
-        self.alternative_url = "https://github.com/brendenlake/omniglot/tree/master/python"
+        self.alternative_url = (
+            "https://github.com/brendenlake/omniglot/tree/master/python"
+        )
         # What is this?
-        zips_md5 = {   # what should these values be? 
-        "images_background": "68d2efa1b9178cc56df9314c21c6e718",
-        "images_evaluation": "6b91aef0f799c5bb55b94e3f2daec811",
+        zips_md5 = {  # what should these values be?
+            "images_background": "68d2efa1b9178cc56df9314c21c6e718",
+            "images_evaluation": "6b91aef0f799c5bb55b94e3f2daec811",
         }
 
         # self.download()
 
-        data_already_exists = os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt")) and os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt")) and os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt")) and os.path.exists(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"))
-
+        data_already_exists = (
+            os.path.exists(
+                os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt")
+            )
+            and os.path.exists(
+                os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt")
+            )
+            and os.path.exists(
+                os.path.join(
+                    f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"
+                )
+            )
+            and os.path.exists(
+                os.path.join(
+                    f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"
+                )
+            )
+        )
 
         if data_already_exists:
-            self.train_data_images = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt"))
-            self.test_data_images = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt"))
-            self.train_data_labels = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"))
-            self.test_data_labels = torch.load(os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"))
+            self.train_data_images = torch.load(
+                os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt")
+            )
+            self.test_data_images = torch.load(
+                os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt")
+            )
+            self.train_data_labels = torch.load(
+                os.path.join(
+                    f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"
+                )
+            )
+            self.test_data_labels = torch.load(
+                os.path.join(
+                    f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"
+                )
+            )
         else:
 
             # load PIL images
@@ -70,50 +105,59 @@ class OmnigotDataset(Dataset):
             test_data += [(img[0].rotate(270), img[1]) for img in self.test_data]
 
             # convert images to tensors   -> (tensor, label) pairs
-            train_data = [(transforms.PILToTensor()(img[0]), img[1]) for img in self.train_data]
-            test_data = [(transforms.PILToTensor()(img[0]), img[1]) for img in self.test_data]
+            train_data = [
+                (transforms.PILToTensor()(img[0]), img[1]) for img in self.train_data
+            ]
+            test_data = [
+                (transforms.PILToTensor()(img[0]), img[1]) for img in self.test_data
+            ]
             # What stack does is it concatenates sequence of tensors along a new dimension.
             self.train_data_images = torch.stack([img[0] for img in self.train_data])
             self.test_data_images = torch.stack([img[0] for img in self.test_data])
             self.train_data_labels = [img[1] for img in self.train_data]
             self.test_data_labels = [img[1] for img in self.test_data]
 
-            # save the transformed data to a file for faster loading 
-            torch.save(self.train_data_images, os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt"))
-            torch.save(self.test_data_images, os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt"))
-            torch.save(self.train_data_labels, os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"))
-            torch.save(self.test_data_labels, os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt")) 
-        
+            # save the transformed data to a file for faster loading
+            torch.save(
+                self.train_data_images,
+                os.path.join(f"{__file__}", "..", "data", "omniglot", "train_data.pt"),
+            )
+            torch.save(
+                self.test_data_images,
+                os.path.join(f"{__file__}", "..", "data", "omniglot", "test_data.pt"),
+            )
+            torch.save(
+                self.train_data_labels,
+                os.path.join(
+                    f"{__file__}", "..", "data", "omniglot", "train_data_labels.pt"
+                ),
+            )
+            torch.save(
+                self.test_data_labels,
+                os.path.join(
+                    f"{__file__}", "..", "data", "omniglot", "test_data_labels.pt"
+                ),
+            )
 
     def __len__(self):
         return len(self.training_dataset)
-        
+
     def __getitem__(self, idx):
         return (self.train_data_images[idx], self.train_data_labels[idx])
-        
-
-    # def _check_integrity(self) -> bool:
-    #     # filename = "images_background" if self.background else "images_evaluation"
-    #     filename = "images_background"
-    #     zip_filename = filename + ".zip"
-    #     if not check_integrity(sys.path.join(self.img_dir, zip_filename), self.zips_md5[filename]):
-    #         return False
-    #     return True
-
-    # def download(self):
-    #     # download the dataset from the internet
-    #     # check whether data is already downloaded or not and download if not
-    #     # if self._check_integrity():
-    #     #     print("Files already downloaded and verified")
-    #     #     return
-    #     filename = "images_background" if self.background else "images_evaluation"
-    #     zip_filename = filename + ".zip"
-    #     url = self.alternative_url + "/" + zip_filename
-    #     download_and_extract_archive(url, self.img_dir, filename=zip_filename, md5=self.zips_md5[filename])
 
 
 class DatasetBase(ABC):
-    def __init__(self, base_dir: str | Path, k_way: int, k_shot: int, k_query: int, n_episodes: int, mode: str = "train", transform: transforms.Compose = None, target_transform: transforms.Compose = None) -> None:
+    def __init__(
+        self,
+        base_dir: str | Path,
+        k_way: int,
+        k_shot: int,
+        k_query: int,
+        n_episodes: int,
+        mode: str = "train",
+        transform: transforms.Compose = None,
+        target_transform: transforms.Compose = None,
+    ) -> None:
         """
         Args:
             base_dir: str | Path, root directory of the dataset
@@ -139,14 +183,7 @@ class DatasetBase(ABC):
     @abstractmethod
     def _load_data(self) -> None:
         pass
-    #
-    # @abstractmethod
-    # def __iter__(self) -> "DatasetBase":
-    #     pass
-    #
-    # @abstractmethod
-    # def __next__(self) -> tuple[torch.Tensor, torch.Tensor]:
-    #     pass
+
 
 # class MiniImageNetDataset(DatasetBase):
 #     """
@@ -193,56 +230,62 @@ class DatasetBase(ABC):
 #         return torch.stack(data), torch.tensor(labels)
 
 
-
 class MiniImageNetDataset(DatasetBase, Dataset):
     """
     Same as MiniImageNetDataset but using PyTorch Dataset class
     """
 
-    def __init__(self, base_dir: str | Path, k_way: int, k_shot: int, k_query: int, n_episodes: int,
-                 mode: str = "train", transform: transforms.Compose = None,
-                 target_transform: transforms.Compose = None) -> None:
+    def __init__(
+        self,
+        base_dir: str | Path,
+        k_way: int,
+        k_shot: int,
+        k_query: int,
+        n_episodes: int,
+        mode: str = "train",
+        transform: transforms.Compose = None,
+        target_transform: transforms.Compose = None,
+    ) -> None:
 
-        super().__init__(base_dir, k_way, k_shot, k_query, n_episodes, mode, transform or transforms.Compose([transforms.Resize((84, 84)), transforms.ToTensor()]), target_transform)
+        super().__init__(
+            base_dir,
+            k_way,
+            k_shot,
+            k_query,
+            n_episodes,
+            mode,
+            transform
+            or transforms.Compose([transforms.Resize((84, 84)), transforms.ToTensor()]),
+            target_transform,
+        )
         # self._organize_samples()
         self.episode_count = 0
 
     def _load_data(self):
         # preload all data and transform them
-        data = datasets.ImageFolder(os.path.join(self.base_dir, self.mode))
-        self.dataset = defaultdict(list)
-        for idx, (path, label) in enumerate(data.samples):
-            image = read_image(path)
-            image = self.transform(image)
-            label = self.target_transform(label)
-            self.dataset[label].append(image)
-
-
-    # def _organize_samples(self):
-    #     self.samples_per_class = defaultdict(list)
-    #     for idx, (_, label) in enumerate(self.dataset.samples):
-    #         self.samples_per_class[label].append(idx)
+        self.dataset = datasets.ImageFolder(
+            os.path.join(self.base_dir, self.mode),
+            transform=self.transform,
+            target_transform=self.target_transform,
+        )
 
     def __len__(self):
-        return self.n_episodes
+        return len(self.dataset)
 
     def __getitem__(self, index):
         start_time = time()
-        if index >= self.n_episodes:
-            raise IndexError("Index out of range")
+        if index in IMG_CACHE:
+            return IMG_CACHE[index]
 
-        # Organize samples by class for the episode
-        classes = np.random.choice(list(self.dataset.keys()), self.k_way, replace=False)
-        data, labels = [], []
-
-        for cls_idx in classes:
-            image_samples = np.random.choice(self.dataset[cls_idx], self.k_shot + self.k_query, replace=False)
-            data.extend(image_samples)
-            labels.extend([cls_idx] * (self.k_shot + self.k_query))
-
-        print(f"Time taken to load episode {index}: {time() - start_time:.2f} seconds")
-        return torch.stack(data), torch.tensor(labels)
+        x, y = self.dataset[index]
+        IMG_CACHE[index] = (x, y)
+        return x, y
 
 
+#   classes = np.random.choice(list(self.dataset.keys()), self.k_way, replace=False)
+#         data, labels = [], []
 
-
+#         for cls_idx in classes:
+#             image_samples = np.random.choice(self.dataset[cls_idx], self.k_shot + self.k_query, replace=False)
+#             data.extend(image_samples)
+#             labels.extend([cls_idx] * (self.k_shot + self.k_query))

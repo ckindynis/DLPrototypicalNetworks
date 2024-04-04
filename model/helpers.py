@@ -34,7 +34,7 @@ def protoLoss(
     target_output = target_output.to('cpu')
 
     # Get unique classes in the episode
-    episode_classes = torch.unique_consecutive(target_output)
+    episode_classes = torch.unique(target_output)
 
     reshaped_tensor = model_output.view(-1, n_support+n_query, model_output.size(1))
 

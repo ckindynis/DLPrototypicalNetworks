@@ -1,4 +1,3 @@
-import click
 import torch
 import typer
 
@@ -9,8 +8,10 @@ from runners import train, test
 from configs import configuration, DatasetConfiguration
 from torch.utils.tensorboard import SummaryWriter
 import os
+from data_sampler import DataSampler
+from torch.utils.data import DataLoader
 
-app = typer.Typer()
+app = typer.Typer(pretty_exceptions_enable=False)
 
 
 @app.command()
@@ -25,7 +26,9 @@ def run_experiment(
         ..., help="Path where the experiment assets are saved."
     ),
     num_epochs: int = typer.Option(100, help="Number of epochs for training."),
-    num_episodes_train: int = typer.Option(None, help="Number of episodes per epoch for training."),
+    num_episodes_train: int = typer.Option(
+        None, help="Number of episodes per epoch for training."
+    ),
     num_episodes_test: int = typer.Option(None, help="Number of episodes to test on."),
     num_validation_steps: int = typer.Option(
         100, help="Number of steps after which you conduct validation."
@@ -93,19 +96,20 @@ def run_experiment(
     num_classes_val = num_classes_val or dataset_configuration.num_classes_val
     num_support_val = num_support_val or dataset_configuration.num_support_val
     num_query_val = num_query_val or dataset_configuration.num_query_val
-    
+
     tensorboard_log_dir = os.path.join(save_path, "Tensorboard")
     if not os.path.exists(tensorboard_log_dir):
         os.makedirs(tensorboard_log_dir)
-    
+
     writer = SummaryWriter(log_dir=tensorboard_log_dir)
-    
+
     if dataset == Datasets.OMNIGLOT:
         in_channels = 1
         original_embedding_size = 64
     elif dataset == Datasets.MINIIMAGE:
         in_channels = 3
         original_embedding_size = 1600
+        # TODO: Current size is 576. Fix this
 
         model = ProtoNetEncoder(
             in_channels=in_channels,
@@ -131,6 +135,12 @@ def run_experiment(
                 k_query=num_query_train,
                 n_episodes=num_episodes_train,
             )
+            train_sampler = DataSampler(
+                labels=train_dataset.dataset.targets,
+                classes_per_it=num_classes_train,
+                num_samples=num_support_train + num_query_train,
+                iterations=num_episodes_train,
+            )
             val_dataset = MiniImageNetDataset(
                 base_dir=data_path,
                 k_way=num_classes_val,
@@ -138,6 +148,12 @@ def run_experiment(
                 k_query=num_query_val,
                 n_episodes=num_episodes_train,
                 mode=Modes.VAL,
+            )
+            val_sampler = DataSampler(
+                labels=val_dataset.dataset.targets,
+                classes_per_it=num_classes_val,
+                num_samples=num_support_val + num_query_val,
+                iterations=num_episodes_train,
             )
             test_dataset = MiniImageNetDataset(
                 base_dir=data_path,
@@ -147,13 +163,23 @@ def run_experiment(
                 n_episodes=num_episodes_test,
                 mode=Modes.TEST,
             )
+            test_sampler = DataSampler(
+                labels=test_dataset.dataset.targets,
+                classes_per_it=num_classes_val,
+                num_samples=num_support_val + num_query_val,
+                iterations=num_episodes_test,
+            )
 
-        # TODO Add For Omniglot here
+        train_dataloader = DataLoader(
+            dataset=train_dataset, batch_sampler=train_sampler
+        )
+        val_dataloader = DataLoader(dataset=val_dataset, batch_sampler=val_sampler)
+        test_dataloader = DataLoader(dataset=test_dataset, batch_sampler=test_sampler)
 
         best_state, train_accuracies, train_losses, val_accuracies, val_losses = train(
             model=model,
-            train_dataset=train_dataset,
-            validation_dataset=val_dataset,
+            train_dataloader=train_dataloader,
+            validation_dataloader=val_dataloader,
             optimiser=optimiser,
             lr_scheduler=lr_scheduler,
             device=device,
@@ -168,18 +194,18 @@ def run_experiment(
             early_stopping_delta=early_stopping_delta,
             save_path=save_path,
             distance_metric=distance_metric,
-            writer=writer
+            writer=writer,
         )
 
         test(
             model=model,
-            test_dataset=test_dataset,
+            test_dataloader=test_dataloader,
             device=device,
             num_query_test=num_query_val,
             num_support_test=num_support_val,
             distance_metric=distance_metric,
         )
-        
+
         writer.close()
 
 

@@ -1,14 +1,12 @@
 from datetime import datetime
 from time import time
 
-from torch.utils.data import DataLoader, Dataset
-
 from model.protonet import ProtoNetEncoder
 import torch
 from constants import TensorboardAssets, AssetNames
-from dataloader import DatasetBase
+from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
-from model.helpers import protoLoss, EarlyStopper, dataloader_batch_removal_collate_fn
+from model.helpers import protoLoss, EarlyStopper
 import numpy as np
 import os
 from torch.utils.tensorboard import SummaryWriter
@@ -16,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 def validation(
     model: ProtoNetEncoder,
-    validation_dataset: Dataset,
+    validation_dataloader: DataLoader,
     device: str,
     num_support_val: int,
     num_query_val: int,
@@ -27,9 +25,10 @@ def validation(
 
     model.eval()  # Needed, as we are using BatchNorm2d (see https://pytorch.org/docs/stable/notes/autograd.html#evaluation-mode-nn-module-eval)
     with torch.inference_mode():  # See: https://pytorch.org/docs/stable/notes/autograd.html#inference-mode. If errors occur, change this to torch.no_grad()
-        val_episode_loader = DataLoader(validation_dataset, batch_size=1, collate_fn=dataloader_batch_removal_collate_fn)
-        for episode_num, (val_image_tensors, val_labels) in enumerate(val_episode_loader):
-            val_image_tensors, val_labels = val_image_tensors.to(device), val_labels.to(device)
+        for _, (val_image_tensors, val_labels) in enumerate(validation_dataloader):
+            val_image_tensors, val_labels = val_image_tensors.to(device), val_labels.to(
+                device
+            )
             val_embeddings = model(val_image_tensors)
 
             val_loss, val_acc = protoLoss(
@@ -48,7 +47,7 @@ def validation(
 
 def test(
     model: ProtoNetEncoder,
-    test_dataset: DatasetBase,
+    test_dataloader: DataLoader,
     device: str,
     num_support_test: int,
     num_query_test: int,
@@ -59,7 +58,7 @@ def test(
 
     model.eval()
     with torch.inference_mode():
-        for test_batch in test_dataset:
+        for test_batch in test_dataloader:
             test_image_tensors, test_labels = test_batch
             test_image_tensors, test_labels = test_image_tensors.to(
                 device
@@ -82,8 +81,8 @@ def test(
 
 def train(
     model: ProtoNetEncoder,
-    train_dataset: DatasetBase,
-    validation_dataset: DatasetBase,
+    train_dataloader: DataLoader,
+    validation_dataloader: DataLoader,
     optimiser: torch.optim.Optimizer,
     lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
     device: str,
@@ -115,27 +114,27 @@ def train(
 
     num_steps = 0
     for epoch in range(num_epochs):
-        train_episode_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=dataloader_batch_removal_collate_fn)
         for episode_num, (image_tensors, label_tensors) in enumerate(
-                tqdm(
-                    train_episode_loader,
-                    desc=f"Doing episodes for epoch {epoch + 1}",
-                    total=num_episodes_per_epoch,
-                )
+            tqdm(
+                train_dataloader,
+                desc=f"Doing episodes for epoch {epoch + 1}",
+                total=num_episodes_per_epoch,
+            )
         ):
             model.train()
 
             optimiser.zero_grad()
             num_steps += 1
             start_time = time()
-            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(device)
+            image_tensors, label_tensors = image_tensors.to(device), label_tensors.to(
+                device
+            )
             print(f"Time taken to move tensors to device: {time() - start_time}")
 
             start_time = time()
             embeddings = model(image_tensors)
             print(f"Time taken to get embeddings: {time() - start_time}")
 
-            start_time = time()
             train_loss, train_acc = protoLoss(
                 model_output=embeddings,
                 target_output=label_tensors,
@@ -143,6 +142,7 @@ def train(
                 n_query=num_query_train,
                 distance_metric=distance_metric,
             )
+
             print(f"Time taken to calculate loss: {time() - start_time}")
             start_time = time()
             train_loss.backward()
@@ -151,7 +151,7 @@ def train(
             start_time = time()
             optimiser.step()
             print(f"Time taken to step optimiser: {time() - start_time}")
-            print("-"* 20)
+            print("-" * 20)
             train_losses.append(train_loss.item())
             train_accuracies.append(train_acc.item())
 
@@ -162,7 +162,7 @@ def train(
 
                 val_losses_run, val_accuracies_run = validation(
                     model=model,
-                    validation_dataset=validation_dataset,
+                    validation_dataloader=validation_dataloader,
                     device=device,
                     num_support_val=num_support_val,
                     num_query_val=num_query_val,
@@ -176,7 +176,7 @@ def train(
                     np.mean(val_accuracies[-num_episodes_per_epoch:]), 3
                 )
                 avg_val_loss = np.mean(val_losses[-num_episodes_per_epoch:])
-                
+
                 writer.add_scalar(TensorboardAssets.VAL_ACC, avg_val_acc, num_steps)
                 writer.add_scalar(TensorboardAssets.VAL_LOSS, avg_val_loss, num_steps)
 
@@ -197,17 +197,20 @@ def train(
                     )
                     best_val_loss = avg_val_loss
                     best_state = model.state_dict()
-                    torch.save(model.state_dict(), save_model_path.replace(
-                        ".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"
-                    ),)
+                    torch.save(
+                        model.state_dict(),
+                        save_model_path.replace(
+                            ".pth", f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.pth"
+                        ),
+                    )
 
             lr_scheduler.step()
 
         avg_train_acc = round(np.mean(train_accuracies[-num_episodes_per_epoch:]), 3)
         avg_train_loss = np.mean(train_losses[-num_episodes_per_epoch:])
-        
-        writer.add_scalar(TensorboardAssets.TRAIN_ACC, avg_train_acc, epoch+1)
-        writer.add_scalar(TensorboardAssets.TRAIN_LOSS, avg_train_loss, epoch+1)
+
+        writer.add_scalar(TensorboardAssets.TRAIN_ACC, avg_train_acc, epoch + 1)
+        writer.add_scalar(TensorboardAssets.TRAIN_LOSS, avg_train_loss, epoch + 1)
 
         print(
             f"Epoch {epoch + 1} | Train Accuracy: {avg_train_acc} | Train Loss: {avg_train_loss}"
