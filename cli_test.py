@@ -53,7 +53,7 @@ def run_experiment(
         show_default=False,
     ),
 ):
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    device = "cpu"
 
     if dataset == Datasets.MINIIMAGE:
         test_dataset = MiniImageNetDataset(
