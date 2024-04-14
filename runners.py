@@ -12,6 +12,7 @@ from model.helpers import protoLoss, EarlyStopper, dataloader_batch_removal_coll
 import numpy as np
 import os
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 
 def validation(
@@ -59,7 +60,7 @@ def test(
 
     model.eval()
     with torch.inference_mode():
-        for test_batch in test_dataset:
+        for test_batch in tqdm(test_dataset):
             test_image_tensors, test_labels = test_batch
             test_image_tensors, test_labels = test_image_tensors.to(
                 device
