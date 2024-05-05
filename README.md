@@ -15,7 +15,7 @@ The process involves two types of data points:
 1. **Support Points:** These are used to calculate the prototype for each class. The barycentric mean of the embeddings of the support points form the class embedding. The support set consists of a few labeled examples per class that are chosen in an episode.
 2. **Query Points:** These are data points that need to be classified into one of the classes chosen for the episode, serving as the input data to learn the embedding. The objective is to ensure that points from the same class are classified nearby in the embedding space.
 
-![ Few-Shot Learning with Prototypical Networks](https://hackmd-prod-images.s3-ap-northeast-1.amazonaws.com/uploads/upload_2f69c48cf0a863b5ff232ab17526128d.png?AWSAccessKeyId=AKIA3XSAAW6AWSKNINWO&Expires=1714909782&Signature=IUsicDEtcV3%2FlE0RG1H2Zp%2BjJqQ%3D)
+![ Few-Shot Learning with Prototypical Networks](figures/upload_2f69c48cf0a863b5ff232ab17526128d.png)
 
 Prototypical Networks can be related to clustering; classes are represented as clusters in the embedding space, and the prototype serves as the centroid of each cluster. This clustering approach enables efficient classification of query points by measuring their distance to the class prototypes. In their paper, Snell et al. found that Euclidean distance performs better than cosine similarity as a distance metric in the embedding space and the same metric is therefore used in our experiments as well.
 
@@ -29,7 +29,7 @@ In our experiments, we evaluated the performance of our Prototypical Networks mo
 
 For 30-way 1-shot learning, we present the training and validation metrics in the figure below. These metrics include accuracy and loss curves, illustrating the performance of our model during the training and validation phases. The metrics show a clear convergence of the train and validation losses.
 
-![Our training and validation metrics for 30-way 1-shot learning on the mini-ImageNet Dataset](https://hackmd-prod-images.s3-ap-northeast-1.amazonaws.com/uploads/upload_fff6bf7352d35c590eb0785a218eb9fa.png?AWSAccessKeyId=AKIA3XSAAW6AWSKNINWO&Expires=1714910006&Signature=km6wGIZA93wgmzutN1KNuOfao%2FI%3D)
+![Our training and validation metrics for 30-way 1-shot learning on the mini-ImageNet Dataset](figures/upload_fff6bf7352d35c590eb0785a218eb9fa.png)
 
 Our results are summarised in the table below -
 
