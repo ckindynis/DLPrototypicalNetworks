@@ -148,9 +148,7 @@ def run_experiment(
                 mode=Modes.TEST,
             )
 
-        # TODO Add For Omniglot here
-
-        best_state, train_accuracies, train_losses, val_accuracies, val_losses = train(
+        train(
             model=model,
             train_dataset=train_dataset,
             validation_dataset=val_dataset,

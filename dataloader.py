@@ -91,27 +91,6 @@ class OmnigotDataset(Dataset):
         
     def __getitem__(self, idx):
         return (self.train_data_images[idx], self.train_data_labels[idx])
-        
-
-    # def _check_integrity(self) -> bool:
-    #     # filename = "images_background" if self.background else "images_evaluation"
-    #     filename = "images_background"
-    #     zip_filename = filename + ".zip"
-    #     if not check_integrity(sys.path.join(self.img_dir, zip_filename), self.zips_md5[filename]):
-    #         return False
-    #     return True
-
-    # def download(self):
-    #     # download the dataset from the internet
-    #     # check whether data is already downloaded or not and download if not
-    #     # if self._check_integrity():
-    #     #     print("Files already downloaded and verified")
-    #     #     return
-    #     filename = "images_background" if self.background else "images_evaluation"
-    #     zip_filename = filename + ".zip"
-    #     url = self.alternative_url + "/" + zip_filename
-    #     download_and_extract_archive(url, self.img_dir, filename=zip_filename, md5=self.zips_md5[filename])
-
 
 class DatasetBase(ABC, Dataset):
     def __init__(self, base_dir: str | Path, k_way: int, k_shot: int, k_query: int, n_episodes: int, mode: str = "train", transform: transforms.Compose = None, target_transform: transforms.Compose = None) -> None:
@@ -140,14 +119,6 @@ class DatasetBase(ABC, Dataset):
     @abstractmethod
     def _load_data(self) -> None:
         pass
-    #
-    # @abstractmethod
-    # def __iter__(self) -> "DatasetBase":
-    #     pass
-    #
-    # @abstractmethod
-    # def __next__(self) -> tuple[torch.Tensor, torch.Tensor]:
-    #     pass
 
 class MiniImageNetDataset(DatasetBase, Dataset):
     """
